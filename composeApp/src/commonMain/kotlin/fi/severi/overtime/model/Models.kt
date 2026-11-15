@@ -80,6 +80,8 @@ data class AppSettings(
     val networkCachingMs: Int = 1500,
     val groupSort: GroupSort = GroupSort.PLAYLIST,
     val sidebarVisible: Boolean = true,
+    /** Sidebar and title bar colour as #RRGGBB; null uses the theme default. */
+    val sidebarColor: String? = null,
     val lastSourceId: String? = null,
     val lastChannelId: String? = null,
     val favorites: Set<String> = emptySet(),

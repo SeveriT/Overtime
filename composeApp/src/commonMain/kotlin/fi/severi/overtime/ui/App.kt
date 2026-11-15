@@ -23,6 +23,7 @@ fun App(vm: AppViewModel) {
         val sources by vm.sources.collectAsState()
         val fullscreen by vm.fullscreen.collectAsState()
         val sidebarVisible by vm.sidebarVisible.collectAsState()
+        val settings by vm.settings.collectAsState()
         var showSources by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 
@@ -32,11 +33,13 @@ fun App(vm: AppViewModel) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Row(Modifier.fillMaxSize()) {
                 if (sidebarVisible) {
-                    ChannelSidebar(
-                        vm = vm,
-                        onOpenSettings = { showSettings = true },
-                        modifier = Modifier.width(340.dp).fillMaxHeight(),
-                    )
+                    SidebarTheme(sidebarColorOf(settings.sidebarColor)) {
+                        ChannelSidebar(
+                            vm = vm,
+                            onOpenSettings = { showSettings = true },
+                            modifier = Modifier.width(340.dp).fillMaxHeight(),
+                        )
+                    }
                 }
                 PlayerPane(
                     vm = vm,

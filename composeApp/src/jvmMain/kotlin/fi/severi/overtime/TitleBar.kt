@@ -28,11 +28,12 @@ object TitleBar {
         else runCatching { Native.load("dwmapi", DwmApi::class.java) }.getOrNull()
     }
 
-    fun apply(window: Window, caption: Color, text: Color) {
+    /** [darkMode] picks light (true) or dark (false) caption button glyphs. */
+    fun apply(window: Window, caption: Color, text: Color, darkMode: Boolean) {
         val api = dwm ?: return
         runCatching {
             val hwnd = Native.getWindowPointer(window) ?: return
-            api.DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, IntByReference(1), 4)
+            api.DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, IntByReference(if (darkMode) 1 else 0), 4)
             api.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, IntByReference(caption.toColorRef()), 4)
             api.DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, IntByReference(caption.toColorRef()), 4)
             api.DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, IntByReference(text.toColorRef()), 4)

@@ -27,8 +27,11 @@ import fi.severi.overtime.data.FileStore
 import fi.severi.overtime.data.Repository
 import fi.severi.overtime.player.VlcPlayer
 import fi.severi.overtime.ui.App
-import fi.severi.overtime.ui.OvertimeColors
+import fi.severi.overtime.model.AppSettings
 import fi.severi.overtime.ui.OvertimeTheme
+import fi.severi.overtime.ui.contentColorFor
+import fi.severi.overtime.ui.isLightColor
+import fi.severi.overtime.ui.sidebarColorOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.jetbrains.skia.Image
 
@@ -45,6 +48,9 @@ fun main() = application {
 
     val windowState = rememberWindowState(width = 1280.dp, height = 800.dp)
     val fullscreen by (vm?.fullscreen ?: MutableStateFlow(false)).collectAsState()
+    val settingsFlow = remember { vm?.settings ?: MutableStateFlow(AppSettings()) }
+    val settings by settingsFlow.collectAsState()
+    val titleBarColor = sidebarColorOf(settings.sidebarColor)
     LaunchedEffect(fullscreen) {
         windowState.placement = if (fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating
     }
@@ -78,8 +84,13 @@ fun main() = application {
         },
     ) {
         // Re-applied after fullscreen changes in case the native window was recreated.
-        LaunchedEffect(window, fullscreen) {
-            TitleBar.apply(window, caption = OvertimeColors.surface, text = OvertimeColors.onSurface)
+        LaunchedEffect(window, fullscreen, titleBarColor) {
+            TitleBar.apply(
+                window,
+                caption = titleBarColor,
+                text = contentColorFor(titleBarColor),
+                darkMode = !isLightColor(titleBarColor),
+            )
         }
 
         if (vm != null) {
