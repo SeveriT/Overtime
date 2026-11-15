@@ -11,6 +11,7 @@ import fi.severi.overtime.model.Channel
 import fi.severi.overtime.model.Source
 import fi.severi.overtime.model.SourceType
 import fi.severi.overtime.player.PlayerState
+import fi.severi.overtime.player.TimeshiftState
 import fi.severi.overtime.player.VideoPlayer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,10 +29,17 @@ import kotlin.test.Test
  * Renders the main screens off-screen to PNGs with demo data and a stand-in player, so UI changes can be
  * reviewed without starting VLC. Enable with OVERTIME_SCREENSHOTS=<output dir>.
  */
+/** A full five-minute buffer with the picture [behindMs] behind live. */
+private fun timeshift(behindMs: Long): TimeshiftState {
+    val live = System.currentTimeMillis()
+    return TimeshiftState(bufferStart = live - 300_000, liveEdge = live, position = live - behindMs, liveToleranceMs = 5_500)
+}
+
 class ScreenshotTest {
     private class FakePlayer : VideoPlayer {
-        override val state: StateFlow<PlayerState> = MutableStateFlow(PlayerState(playing = true, volume = 70))
-        override fun play(url: String, networkCachingMs: Int, userAgent: String) = Unit
+        val mutableState = MutableStateFlow(PlayerState(playing = true, volume = 70, timeshift = timeshift(behindMs = 2_000)))
+        override val state: StateFlow<PlayerState> = mutableState
+        override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long) = Unit
         override fun stop() = Unit
         override fun togglePause() = Unit
         override fun setVolume(volume: Int) = Unit
@@ -47,7 +55,8 @@ class ScreenshotTest {
         System.setProperty("overtime.dataDir", dataDir.absolutePath)
         seed(dataDir)
 
-        val vm = AppViewModel(Repository(FileStore()), FakePlayer())
+        val player = FakePlayer()
+        val vm = AppViewModel(Repository(FileStore()), player)
         Thread.sleep(1_500) // cached EPG loads in the background
 
         shoot(outDir, "1_groups", 1280, 800) { App(vm) }
@@ -61,6 +70,13 @@ class ScreenshotTest {
 
         vm.updateSettings { it.copy(accentColor = "#FFB1C8", sidebarColor = "#2E1219") }
         shoot(outDir, "4_custom_colours", 1280, 800) { App(vm) }
+
+        vm.updateSettings { it.copy(accentColor = null, sidebarColor = null) }
+        player.mutableState.value = player.mutableState.value.copy(paused = true, timeshift = timeshift(behindMs = 83_000))
+        shoot(outDir, "5_rewound", 1280, 800) { App(vm) }
+
+        player.mutableState.value = player.mutableState.value.copy(paused = false, timeshift = null)
+        shoot(outDir, "6_no_rewind", 1280, 800) { App(vm) }
 
         vm.shutdown()
         dataDir.deleteRecursively()

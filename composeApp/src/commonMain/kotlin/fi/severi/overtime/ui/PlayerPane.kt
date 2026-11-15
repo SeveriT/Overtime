@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,13 +26,17 @@ import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -39,6 +45,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconButtonDefaults.IconButtonWidthOption
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
@@ -53,15 +61,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fi.severi.overtime.AppViewModel
 import fi.severi.overtime.data.formatClock
 import fi.severi.overtime.data.nowMillis
+import fi.severi.overtime.player.REWIND_STEP_MS
+import fi.severi.overtime.player.TimeshiftState
 import fi.severi.overtime.player.VideoSurface
 import kotlinx.coroutines.delay
 
@@ -70,9 +83,9 @@ private const val VOLUME_FLYOUT_MS = 1_500L
 
 /** Shared look for the floating toolbar and the volume popup. */
 @Composable
-private fun FloatingPill(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+private fun FloatingPill(modifier: Modifier = Modifier, shape: Shape = CircleShape, content: @Composable () -> Unit) {
     Surface(
-        shape = CircleShape,
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f),
         contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 8.dp,
@@ -158,6 +171,29 @@ fun PlayerPane(
             VolumeFlyout(vm, volume = settings.volume, muted = state.muted)
         }
 
+        // While watching delayed with the controls hidden, keep the delay visible.
+        val timeshift = state.timeshift
+        AnimatedVisibility(
+            visible = timeshift != null && !timeshift.isLive && !overlayVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
+        ) {
+            FloatingPill {
+                Row(
+                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                    Text(
+                        "−" + formatDuration(timeshift?.behindMs ?: 0),
+                        style = MaterialTheme.typography.labelLargeEmphasized,
+                    )
+                }
+            }
+        }
+
         AnimatedVisibility(
             visible = overlayVisible,
             enter = fadeIn(),
@@ -211,6 +247,7 @@ fun PlayerPane(
                     volume = settings.volume,
                     fullscreen = fullscreen,
                     sidebarVisible = sidebarVisible,
+                    timeshift = state.timeshift,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
                 )
             }
@@ -220,7 +257,8 @@ fun PlayerPane(
 
 /**
  * Floating toolbar in the M3 Expressive "Back · Edit · Next" pattern: tonal neighbours around a wide
- * filled play/pause, then mute toggle and volume, all with press shape-morphing.
+ * filled play/pause, then mute toggle and volume, all with press shape-morphing. While the stream is
+ * recorded it grows a rewind row (timeline, behind-live time, live marker) and ±10 s buttons.
  */
 @Composable
 private fun PlayerToolbar(
@@ -230,11 +268,39 @@ private fun PlayerToolbar(
     volume: Int,
     fullscreen: Boolean,
     sidebarVisible: Boolean,
+    timeshift: TimeshiftState?,
     modifier: Modifier = Modifier,
 ) {
-    FloatingPill(modifier) {
+    val shape = if (timeshift != null) MaterialTheme.shapes.extraLargeIncreased else CircleShape
+    FloatingPill(modifier, shape) {
+        Column(
+            Modifier.width(IntrinsicSize.Max).padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (timeshift != null) {
+                TimeshiftBar(
+                    state = timeshift,
+                    onSeek = vm::seekTo,
+                    onGoLive = vm::goLive,
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp),
+                )
+            }
+            ToolbarButtons(vm, paused, muted, volume, fullscreen, sidebarVisible, timeshift)
+        }
+    }
+}
+
+@Composable
+private fun ToolbarButtons(
+    vm: AppViewModel,
+    paused: Boolean,
+    muted: Boolean,
+    volume: Int,
+    fullscreen: Boolean,
+    sidebarVisible: Boolean,
+    timeshift: TimeshiftState?,
+) {
         Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -243,9 +309,12 @@ private fun PlayerToolbar(
                 if (sidebarVisible) "Hide channel list (S)" else "Show channel list (S)",
             ) { vm.toggleSidebar() }
 
-            VerticalDivider(Modifier.size(width = 1.dp, height = 28.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
             ToolbarButton(Icons.Default.SkipPrevious, "Previous channel (←)") { vm.step(-1) }
+            if (timeshift != null) {
+                ToolbarButton(Icons.Default.Replay10, "Back 10 seconds (Shift+←)") { vm.seekBy(-REWIND_STEP_MS) }
+            }
             WithTooltip(if (paused) "Play (Space)" else "Pause (Space)") {
                 FilledIconButton(
                     onClick = { vm.player.togglePause() },
@@ -259,9 +328,16 @@ private fun PlayerToolbar(
                     )
                 }
             }
+            if (timeshift != null) {
+                ToolbarButton(
+                    Icons.Default.Forward10,
+                    "Forward 10 seconds (Shift+→)",
+                    enabled = !timeshift.isLive,
+                ) { vm.seekBy(REWIND_STEP_MS) }
+            }
             ToolbarButton(Icons.Default.SkipNext, "Next channel (→)") { vm.step(1) }
 
-            VerticalDivider(Modifier.size(width = 1.dp, height = 28.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
             WithTooltip(if (muted) "Unmute (M)" else "Mute (M)") {
                 FilledTonalIconToggleButton(
@@ -279,16 +355,91 @@ private fun PlayerToolbar(
                 if (fullscreen) "Exit fullscreen (F)" else "Fullscreen (F)",
             ) { vm.toggleFullscreen() }
         }
-    }
 }
 
 @Composable
-private fun ToolbarButton(icon: ImageVector, tooltip: String, onClick: () -> Unit) {
+private fun ToolbarButton(icon: ImageVector, tooltip: String, enabled: Boolean = true, onClick: () -> Unit) {
     WithTooltip(tooltip) {
-        FilledTonalIconButton(onClick = onClick, shapes = IconButtonDefaults.shapes()) {
+        FilledTonalIconButton(onClick = onClick, enabled = enabled, shapes = IconButtonDefaults.shapes()) {
             Icon(icon, contentDescription = tooltip)
         }
     }
+}
+
+/**
+ * Rewind row: how far behind live, a continuous slider over the buffered window (oldest → live edge),
+ * and the live marker — a LIVE badge in the error roles when following live, an assist chip to jump
+ * back otherwise. Dragging previews the time and seeks on release.
+ */
+@Composable
+private fun TimeshiftBar(
+    state: TimeshiftState,
+    onSeek: (Long) -> Unit,
+    onGoLive: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var dragValue by remember { mutableStateOf<Float?>(null) }
+    val length = state.lengthMs.toFloat().coerceAtLeast(1f)
+    val value = (dragValue ?: (state.position - state.bufferStart).toFloat()).coerceIn(0f, length)
+    val behind = if (dragValue != null) (length - value).toLong() else state.behindMs
+    val live = dragValue == null && state.isLive
+
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(
+            // Live: how far back you can go. Behind: how far behind live you are.
+            "−" + formatDuration(if (live) state.lengthMs else behind),
+            style = if (live) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelLargeEmphasized,
+            color = if (live) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(56.dp).semantics { contentDescription = if (live) "Rewind available" else "Behind live" },
+        )
+        Slider(
+            value = value,
+            onValueChange = { dragValue = it },
+            onValueChangeFinished = {
+                dragValue?.let { onSeek(state.bufferStart + it.toLong()) }
+                dragValue = null
+            },
+            valueRange = 0f..length,
+            colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+            modifier = Modifier.weight(1f).semantics { contentDescription = "Rewind position" },
+        )
+        if (live) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            ) {
+                Row(
+                    Modifier.height(32.dp).padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.error, CircleShape))
+                    Text("LIVE", style = MaterialTheme.typography.labelLargeEmphasized)
+                }
+            }
+        } else {
+            WithTooltip("Back to live (End)") {
+                AssistChip(
+                    onClick = onGoLive,
+                    label = { Text("Go live") },
+                    leadingIcon = {
+                        Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.onSurfaceVariant, CircleShape))
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** m:ss, or h:mm:ss past an hour. */
+private fun formatDuration(ms: Long): String {
+    val total = (ms / 1000).coerceAtLeast(0)
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    val s = total % 60
+    return if (h > 0) "$h:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}"
+    else "$m:${s.toString().padStart(2, '0')}"
 }
 
 private fun volumeIcon(volume: Int, muted: Boolean): ImageVector = when {
@@ -302,17 +453,17 @@ private fun volumeIcon(volume: Int, muted: Boolean): ImageVector = when {
 private fun VolumeFlyout(vm: AppViewModel, volume: Int, muted: Boolean) {
     FloatingPill {
         Row(
-            Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 6.dp),
+            Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Icon(volumeIcon(volume, muted), contentDescription = null, modifier = Modifier.size(22.dp))
+            Icon(volumeIcon(volume, muted), contentDescription = null, modifier = Modifier.size(24.dp))
             VolumeSlider(volume, muted, onVolumeChange = vm::setVolume, modifier = Modifier.width(150.dp))
             Text(
                 if (muted) "Muted" else volume.toString(),
                 style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
                 textAlign = TextAlign.End,
-                modifier = Modifier.width(52.dp),
+                modifier = Modifier.width(56.dp),
             )
         }
     }

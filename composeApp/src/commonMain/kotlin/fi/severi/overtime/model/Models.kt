@@ -84,6 +84,9 @@ data class AppSettings(
     val sidebarColor: String? = null,
     /** Accent (primary) colour as #RRGGBB; null uses the theme default blue. */
     val accentColor: String? = null,
+    /** Record live streams so they can be paused and rewound. */
+    val rewindEnabled: Boolean = true,
+    val rewindMinutes: Int = 5,
     val lastSourceId: String? = null,
     val lastChannelId: String? = null,
     val favorites: Set<String> = emptySet(),

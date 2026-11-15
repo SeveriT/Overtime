@@ -10,10 +10,20 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
 import org.jetbrains.skia.Image
@@ -27,7 +37,10 @@ import uk.co.caprica.vlcj.player.embedded.videosurface.callback.BufferFormat
 import uk.co.caprica.vlcj.player.embedded.videosurface.callback.BufferFormatCallbackAdapter
 import uk.co.caprica.vlcj.player.embedded.videosurface.callback.RenderCallback
 import uk.co.caprica.vlcj.player.embedded.videosurface.callback.format.RV32BufferFormat
+import java.io.File
 import java.nio.ByteBuffer
+import java.util.UUID
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -74,16 +87,22 @@ class VlcPlayer : VideoPlayer {
         player.videoSurface().set(factory.videoSurfaces().newVideoSurface(bufferFormatCallback, renderCallback, true))
         player.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
             override fun playing(mediaPlayer: MediaPlayer) {
+                if (runningSince == 0L) runningSince = System.currentTimeMillis()
                 _state.update { it.copy(playing = true, paused = false, buffering = null, error = null) }
             }
 
             override fun paused(mediaPlayer: MediaPlayer) {
+                if (runningSince != 0L) {
+                    playedBeforeMs += System.currentTimeMillis() - runningSince
+                    runningSince = 0L
+                }
                 _state.update { it.copy(paused = true) }
             }
 
             override fun stopped(mediaPlayer: MediaPlayer) {
                 _state.update { it.copy(playing = false, paused = false, buffering = null) }
-                _frame.value = null
+                // While time-shifting, a seek restarts VLC; keep the last frame up instead of flashing black.
+                if (recorder == null) _frame.value = null
             }
 
             override fun buffering(mediaPlayer: MediaPlayer, newCache: Float) {
@@ -95,10 +114,127 @@ class VlcPlayer : VideoPlayer {
             }
 
             override fun finished(mediaPlayer: MediaPlayer) {
+                // A buffered input only "ends" because we replaced it (seek) or stopped recording.
+                if (recorder != null) return
                 _state.update { it.copy(playing = false, buffering = null, error = "Stream ended") }
             }
         })
     }
+
+    // ---- live rewind -------------------------------------------------------------------
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val sessionLock = Any()
+    private val timeshiftRoot = File(System.getProperty("java.io.tmpdir"), "overtime-timeshift")
+
+    init {
+        // Buffers left behind by a crash.
+        timeshiftRoot.deleteRecursively()
+    }
+
+    @Volatile private var recorder: TimeshiftRecorder? = null
+    private var media: TimeshiftMedia? = null
+
+    /** Replaced inputs stay referenced briefly: libVLC may still call their callbacks while closing. */
+    private val retired = ArrayDeque<TimeshiftMedia>()
+    private var mediaStartWall = 0L
+    private var cushionMs = 1_500L
+    private var sessionJob: Job? = null
+
+    // Our own playback clock for the current buffered input: VLC reports no time for a live callback
+    // input, so count the wall time spent actually playing (paused time excluded).
+    @Volatile private var playedBeforeMs = 0L
+    @Volatile private var runningSince = 0L
+
+    private fun playedMs(): Long {
+        val since = runningSince
+        return playedBeforeMs + if (since != 0L) System.currentTimeMillis() - since else 0L
+    }
+
+    private fun playDirect(url: String, networkCachingMs: Int, userAgent: String) {
+        player.media().play(url, ":network-caching=$networkCachingMs", ":http-user-agent=$userAgent")
+    }
+
+    private suspend fun runSession(rec: TimeshiftRecorder, url: String, networkCachingMs: Int, userAgent: String) {
+        val status = rec.status.first { it != TimeshiftRecorder.Status.Starting }
+        synchronized(sessionLock) {
+            if (recorder !== rec) return
+            if (status != TimeshiftRecorder.Status.Ready) {
+                // Not recordable (or our download failed): VLC may still manage it on its own.
+                rec.stop()
+                recorder = null
+                playDirect(url, networkCachingMs, userAgent)
+                return
+            }
+            // HLS needs a bigger cushion than plain TS; the recorder knows which this is.
+            cushionMs = max(cushionMs, rec.liveDelayMs)
+            startAt(rec, rec.offsetAt(rec.liveWall - cushionMs))
+        }
+        while (currentCoroutineContext().isActive) {
+            delay(TICK_MS)
+            val failed = rec.status.value as? TimeshiftRecorder.Status.Failed
+            if (failed != null) {
+                _state.update { it.copy(error = "Stream stopped: ${failed.message}") }
+                return
+            }
+            publish(rec)
+        }
+    }
+
+    /** Points VLC at [offset] in the buffer. Caller holds [sessionLock]. */
+    private fun startAt(rec: TimeshiftRecorder, offset: Long) {
+        media?.let {
+            it.cancel()
+            retired.addLast(it)
+            while (retired.size > 4) retired.removeFirst()
+        }
+        val next = TimeshiftMedia(rec, offset) {
+            // Paused for longer than the buffer: resume from the oldest moment still kept.
+            scope.launch { seekTo(rec.earliestWall + cushionMs) }
+        }
+        media = next
+        mediaStartWall = rec.wallAt(offset)
+        playedBeforeMs = 0L
+        runningSince = 0L
+        player.media().play(next)
+        publish(rec)
+    }
+
+    private fun publish(rec: TimeshiftRecorder) {
+        val start = rec.earliestWall
+        val live = rec.liveWall
+        val position = (mediaStartWall + playedMs()).coerceIn(start, max(start, live))
+        // HLS's live edge jumps a segment at a time, so "live" must allow for one jump.
+        val tolerance = cushionMs + LIVE_SLACK_MS + rec.edgeStepMs
+        _state.update { it.copy(timeshift = TimeshiftState(start, live, position, liveToleranceMs = tolerance)) }
+    }
+
+    private fun endSession() {
+        sessionJob?.cancel()
+        sessionJob = null
+        media?.cancel()
+        media?.let(retired::addLast)
+        media = null
+        recorder?.stop()
+        recorder = null
+    }
+
+    override fun seekTo(wallMs: Long) {
+        synchronized(sessionLock) {
+            val rec = recorder ?: return
+            if (media == null) return
+            val newest = rec.liveWall - cushionMs
+            val target = wallMs.coerceIn(rec.earliestWall, max(rec.earliestWall, newest))
+            startAt(rec, rec.offsetAt(target))
+        }
+    }
+
+    override fun seekBy(deltaMs: Long) {
+        val position = _state.value.timeshift?.position ?: return
+        seekTo(position + deltaMs)
+    }
+
+    override fun goLive() = seekTo(Long.MAX_VALUE)
 
     private fun renderFrame(buffer: ByteBuffer, format: BufferFormat) {
         val info = imageInfo ?: return
@@ -109,12 +245,36 @@ class VlcPlayer : VideoPlayer {
         _frame.value = Image.makeRaster(info, pixels, format.pitches[0]).toComposeImageBitmap()
     }
 
-    override fun play(url: String, networkCachingMs: Int, userAgent: String) {
-        _state.update { it.copy(playing = false, paused = false, buffering = 0f, error = null) }
-        player.media().play(url, ":network-caching=$networkCachingMs", ":http-user-agent=$userAgent")
+    override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long) {
+        synchronized(sessionLock) {
+            endSession()
+            _state.update { it.copy(playing = false, paused = false, buffering = 0f, error = null, timeshift = null) }
+            if (rewindBufferMs <= 0) {
+                _frame.value = null
+                playDirect(url, networkCachingMs, userAgent)
+                return
+            }
+            // Start this far behind live so short network hiccups never starve playback.
+            cushionMs = networkCachingMs.toLong().coerceAtLeast(MIN_CUSHION_MS)
+            val rec = TimeshiftRecorder(
+                url = url,
+                userAgent = userAgent,
+                bufferMs = rewindBufferMs,
+                readyAfterMs = cushionMs,
+                dir = File(timeshiftRoot, UUID.randomUUID().toString()),
+            )
+            recorder = rec
+            _frame.value = null
+            rec.start()
+            sessionJob = scope.launch { runSession(rec, url, networkCachingMs, userAgent) }
+        }
     }
 
-    override fun stop() = player.controls().stop()
+    override fun stop() {
+        synchronized(sessionLock) { endSession() }
+        player.controls().stop()
+        _state.update { it.copy(timeshift = null) }
+    }
 
     override fun togglePause() {
         if (_state.value.playing || _state.value.paused) player.controls().pause()
@@ -131,8 +291,17 @@ class VlcPlayer : VideoPlayer {
     }
 
     override fun release() {
+        synchronized(sessionLock) { endSession() }
+        scope.cancel()
         player.release()
         factory.release()
+        timeshiftRoot.deleteRecursively()
+    }
+
+    private companion object {
+        const val TICK_MS = 500L
+        const val MIN_CUSHION_MS = 1_500L
+        const val LIVE_SLACK_MS = 4_000L
     }
 }
 

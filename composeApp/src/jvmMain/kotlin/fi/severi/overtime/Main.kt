@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
@@ -28,6 +29,7 @@ import fi.severi.overtime.data.Repository
 import fi.severi.overtime.player.VlcPlayer
 import fi.severi.overtime.ui.App
 import fi.severi.overtime.model.AppSettings
+import fi.severi.overtime.player.REWIND_STEP_MS
 import fi.severi.overtime.ui.OvertimeTheme
 import fi.severi.overtime.ui.contentColorFor
 import fi.severi.overtime.ui.isLightColor
@@ -75,8 +77,11 @@ fun main() = application {
                 Key.Spacebar -> { vm.player.togglePause(); true }
                 Key.M -> { vm.player.toggleMute(); true }
                 Key.S -> { vm.toggleSidebar(); true }
-                Key.PageUp, Key.DirectionLeft -> { vm.step(-1); true }
-                Key.PageDown, Key.DirectionRight -> { vm.step(1); true }
+                Key.DirectionLeft -> { if (event.isShiftPressed) vm.seekBy(-REWIND_STEP_MS) else vm.step(-1); true }
+                Key.DirectionRight -> { if (event.isShiftPressed) vm.seekBy(REWIND_STEP_MS) else vm.step(1); true }
+                Key.PageUp -> { vm.step(-1); true }
+                Key.PageDown -> { vm.step(1); true }
+                Key.MoveEnd -> { vm.goLive(); true }
                 Key.DirectionUp -> { vm.adjustVolume(+5); true }
                 Key.DirectionDown -> { vm.adjustVolume(-5); true }
                 else -> false

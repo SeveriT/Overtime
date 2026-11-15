@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +42,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -99,6 +102,27 @@ private fun SectionHeader(text: String) {
     )
 }
 
+/** Two-line list item with a trailing switch; the whole row toggles. */
+@Composable
+private fun SwitchRow(title: String, supporting: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(supporting, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        // The row handles clicks; the switch only shows state.
+        Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
 @Composable
 private fun FieldLabel(text: String) {
     Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -149,7 +173,7 @@ fun SourcesDialog(vm: AppViewModel, onDismiss: () -> Unit) {
             LazyColumn(Modifier.heightIn(max = 240.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(sources, key = { it.id }) { source ->
                     Surface(
-                        shape = RoundedCornerShape(20.dp),
+                        shape = MaterialTheme.shapes.largeIncreased,
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -241,6 +265,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     var userAgent by remember { mutableStateOf(settings.userAgent) }
     var caching by remember { mutableStateOf(settings.networkCachingMs.toString()) }
     var groupSort by remember { mutableStateOf(settings.groupSort) }
+    var rewindEnabled by remember { mutableStateOf(settings.rewindEnabled) }
 
     // Colours preview live; closing without saving puts the originals back.
     val originalSidebar = remember { settings.sidebarColor }
@@ -263,6 +288,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                             userAgent = userAgent.trim().ifEmpty { it.userAgent },
                             networkCachingMs = caching.toIntOrNull()?.coerceIn(0, 60_000) ?: it.networkCachingMs,
                             groupSort = groupSort,
+                            rewindEnabled = rewindEnabled,
                         )
                     }
                     onDismiss()
@@ -316,6 +342,13 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
         )
 
         SectionHeader("Playback")
+        SwitchRow(
+            title = "Live rewind",
+            supporting = "Keeps the last ${settings.rewindMinutes} minutes of the channel you watch so you can pause, " +
+                "rewind and jump back to live. Uses some disk space while watching.",
+            checked = rewindEnabled,
+            onCheckedChange = { rewindEnabled = it },
+        )
         OutlinedTextField(userAgent, { userAgent = it }, label = { Text("HTTP user agent") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(
             caching, { caching = it.filter(Char::isDigit) },
@@ -327,7 +360,8 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
 
         SectionHeader("Info")
         Text(
-            "Shortcuts: ← → or Page Up/Down change channel · ↑ ↓ volume · Space pause · M mute · S channel list · F or F11 fullscreen · Esc back / leave fullscreen",
+            "Shortcuts: ← → or Page Up/Down change channel · Shift+← → rewind / forward 10 s · End back to live · " +
+                "↑ ↓ volume · Space pause · M mute · S channel list · F or F11 fullscreen · Esc back / leave fullscreen",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

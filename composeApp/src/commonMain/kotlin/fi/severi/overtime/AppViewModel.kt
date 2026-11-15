@@ -184,9 +184,18 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
             selectedGroup.value = channel.group
         }
         val s = _settings.value
-        player.play(channel.url, s.networkCachingMs, s.userAgent)
+        val rewindMs = if (s.rewindEnabled) s.rewindMinutes * 60_000L else 0L
+        player.play(channel.url, s.networkCachingMs, s.userAgent, rewindMs)
         updateSettings { it.copy(lastChannelId = channel.id, lastSourceId = channel.sourceId) }
     }
+
+    // ---- live rewind ------------------------------------------------------------
+
+    fun seekBy(deltaMs: Long) = player.seekBy(deltaMs)
+
+    fun seekTo(wallMs: Long) = player.seekTo(wallMs)
+
+    fun goLive() = player.goLive()
 
     /** Moves to the previous (-1) or next (+1) channel within the selected group. */
     fun step(delta: Int) {
@@ -270,6 +279,10 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         _settings.value = after
         repo.saveSettings(after)
         if (after.userAgent != before.userAgent) repo.setUserAgent(after.userAgent)
+        // Recording starts with playback, so turning rewind on or off restarts the current channel.
+        if (after.rewindEnabled != before.rewindEnabled || after.rewindMinutes != before.rewindMinutes) {
+            currentChannel.value?.let(::play)
+        }
     }
 
     val dataDirectory: String get() = repo.dataDirectory
