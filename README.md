@@ -19,6 +19,7 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 - Browse by category, search and poster grid
 - Continue watching, resume and Next up for series
 - Rated poster artwork
+- Poster size options (small, medium, large)
 - Mini player while browsing
 
 ### Player
