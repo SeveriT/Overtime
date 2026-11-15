@@ -7,6 +7,7 @@ import fi.severi.overtime.model.Channel
 import fi.severi.overtime.model.EpgData
 import fi.severi.overtime.model.GROUP_ALL
 import fi.severi.overtime.model.GROUP_FAVORITES
+import fi.severi.overtime.model.GroupEntry
 import fi.severi.overtime.model.GroupSort
 import fi.severi.overtime.model.Programme
 import fi.severi.overtime.model.Source
@@ -38,7 +39,13 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     private val _epg = MutableStateFlow<Map<String, EpgData>>(emptyMap())
 
     val selectedSourceId = MutableStateFlow(_settings.value.lastSourceId ?: _sources.value.firstOrNull()?.id)
+
+    /** Group whose channels the sidebar shows and Left/Right steps through. */
     val selectedGroup = MutableStateFlow(GROUP_ALL)
+
+    /** True while the sidebar lists groups; false once a group is opened. The app starts on the group list. */
+    val showGroupList = MutableStateFlow(true)
+
     val query = MutableStateFlow("")
     val currentChannel = MutableStateFlow<Channel?>(null)
 
@@ -70,17 +77,39 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     fun toggleFullscreen() = setFullscreen(!fullscreen.value)
 
-    val groups: StateFlow<List<String>> = combine(_channels, selectedSourceId, _settings) { channels, sourceId, settings ->
-        val own = channels[sourceId].orEmpty()
+    /** All channels of the selected source, in playlist order. */
+    val sourceChannels: StateFlow<List<Channel>> = combine(_channels, selectedSourceId) { channels, sourceId ->
+        channels[sourceId].orEmpty()
+    }.stateIn(scope, SharingStarted.Eagerly, _channels.value[selectedSourceId.value].orEmpty())
+
+    /** All channels and Favorites first, then the source's own groups in the chosen order, each with its channel count. */
+    val groups: StateFlow<List<GroupEntry>> = combine(sourceChannels, _settings) { channels, settings ->
+        buildGroups(channels, settings)
+    }.stateIn(scope, SharingStarted.Eagerly, buildGroups(sourceChannels.value, _settings.value))
+
+    private fun buildGroups(channels: List<Channel>, settings: AppSettings): List<GroupEntry> {
+        val counts = LinkedHashMap<String, Int>()
+        channels.forEach { counts[it.group] = (counts[it.group] ?: 0) + 1 }
+        val own = counts.entries.map { GroupEntry(it.key, it.value) }
         val sorted = when (settings.groupSort) {
-            GroupSort.ALPHABETICAL -> own.asSequence().map { it.group }.distinct().sortedWith(String.CASE_INSENSITIVE_ORDER).toList()
-            GroupSort.PLAYLIST -> own.asSequence().map { it.group }.distinct().toList()
-            GroupSort.SIZE -> own.groupingBy { it.group }.eachCount().entries
-                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.key })
-                .map { it.key }
+            GroupSort.PLAYLIST -> own
+            GroupSort.ALPHABETICAL -> own.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+            GroupSort.SIZE -> own.sortedWith(compareByDescending<GroupEntry> { it.count }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
         }
-        listOf(GROUP_ALL, GROUP_FAVORITES) + sorted
-    }.stateIn(scope, SharingStarted.Eagerly, listOf(GROUP_ALL, GROUP_FAVORITES))
+        val favorites = channels.count { it.id in settings.favorites }
+        return listOf(GroupEntry(GROUP_ALL, channels.size), GroupEntry(GROUP_FAVORITES, favorites)) + sorted
+    }
+
+    fun openGroup(name: String) {
+        selectedGroup.value = name
+        query.value = ""
+        showGroupList.value = false
+    }
+
+    fun backToGroups() {
+        query.value = ""
+        showGroupList.value = true
+    }
 
     fun setGroupSort(sort: GroupSort) = updateSettings { it.copy(groupSort = sort) }
 
@@ -89,17 +118,35 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         setGroupSort(all[(all.indexOf(_settings.value.groupSort) + 1) % all.size])
     }
 
-    val visibleChannels: StateFlow<List<Channel>> =
-        combine(_channels, selectedSourceId, selectedGroup, query, _settings) { channels, sourceId, group, query, settings ->
-            val base = channels[sourceId].orEmpty()
-            val grouped = when (group) {
-                GROUP_ALL -> base
-                GROUP_FAVORITES -> base.filter { it.id in settings.favorites }
-                else -> base.filter { it.group == group }
-            }
-            val q = query.trim()
-            if (q.isEmpty()) grouped else grouped.filter { it.name.contains(q, ignoreCase = true) }
-        }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+    fun channelsIn(
+        group: String,
+        all: List<Channel> = sourceChannels.value,
+        favorites: Set<String> = _settings.value.favorites,
+    ): List<Channel> = when (group) {
+        GROUP_ALL -> all
+        GROUP_FAVORITES -> all.filter { it.id in favorites }
+        else -> all.filter { it.group == group }
+    }
+
+    /**
+     * Channels the sidebar should list. On the group list only a search shows channels (across every group);
+     * inside a group the search narrows that group.
+     */
+    fun visibleChannels(
+        all: List<Channel>,
+        group: String,
+        groupListShown: Boolean,
+        query: String,
+        favorites: Set<String>,
+    ): List<Channel> {
+        val q = query.trim()
+        val base = when {
+            groupListShown && q.isEmpty() -> return emptyList()
+            groupListShown -> all
+            else -> channelsIn(group, all, favorites)
+        }
+        return if (q.isEmpty()) base else base.filter { it.name.contains(q, ignoreCase = true) }
+    }
 
     val epgForSelectedSource: StateFlow<EpgData> = combine(_epg, selectedSourceId) { epg, id -> epg[id] ?: EpgData() }
         .stateIn(scope, SharingStarted.Eagerly, EpgData())
@@ -132,14 +179,18 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     fun play(channel: Channel) {
         currentChannel.value = channel
+        // A channel picked from a search outside the current group makes its own group the one Left/Right steps through.
+        if (channel.sourceId == selectedSourceId.value && channelsIn(selectedGroup.value).none { it.id == channel.id }) {
+            selectedGroup.value = channel.group
+        }
         val s = _settings.value
         player.play(channel.url, s.networkCachingMs, s.userAgent)
         updateSettings { it.copy(lastChannelId = channel.id, lastSourceId = channel.sourceId) }
     }
 
-    /** Moves to the previous (-1) or next (+1) channel in the visible list. */
+    /** Moves to the previous (-1) or next (+1) channel within the selected group. */
     fun step(delta: Int) {
-        val list = visibleChannels.value
+        val list = channelsIn(selectedGroup.value)
         if (list.isEmpty()) return
         val index = list.indexOfFirst { it.id == currentChannel.value?.id }
         val target = if (index < 0) 0 else ((index + delta) % list.size + list.size) % list.size
@@ -163,6 +214,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     fun selectSource(id: String) {
         selectedSourceId.value = id
         selectedGroup.value = GROUP_ALL
+        backToGroups()
         updateSettings { it.copy(lastSourceId = id) }
     }
 

@@ -86,5 +86,7 @@ data class AppSettings(
     val volume: Int = 100,
 )
 
+data class GroupEntry(val name: String, val count: Int)
+
 const val GROUP_ALL = "All channels"
 const val GROUP_FAVORITES = "Favorites"

@@ -48,7 +48,11 @@ fun main() = application {
             if (event.type != KeyEventType.KeyDown || vm == null) return@Window false
             when (event.key) {
                 Key.F, Key.F11 -> { vm.toggleFullscreen(); true }
-                Key.Escape -> if (fullscreen) { vm.setFullscreen(false); true } else false
+                Key.Escape -> when {
+                    fullscreen -> { vm.setFullscreen(false); true }
+                    !vm.showGroupList.value -> { vm.backToGroups(); true }
+                    else -> false
+                }
                 Key.Spacebar -> { vm.player.togglePause(); true }
                 Key.M -> { vm.player.toggleMute(); true }
                 Key.S -> { vm.toggleSidebar(); true }
