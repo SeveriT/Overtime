@@ -64,4 +64,22 @@ class XmltvParserTest {
         assertEquals(2 * 60 * 60 * 1000L, to - from)
         assertNull(parseXmltv(ByteArray(0)).span)
     }
+
+    @Test
+    fun mergesGuides() {
+        val first = parseXmltv(xml.encodeToByteArray())
+        val second = parseXmltv(
+            """
+            <tv>
+              <channel id="mtv3.fi"><display-name>MTV3</display-name></channel>
+              <programme start="20261115200000 +0200" stop="20261115210000 +0200" channel="mtv3.fi"><title>Uutiset</title></programme>
+              <programme start="20261115210000 +0200" stop="20261115220000 +0200" channel="yle1.fi"><title>Sports</title></programme>
+              <programme start="20261115220000 +0200" stop="20261115230000 +0200" channel="yle1.fi"><title>Late film</title></programme>
+            </tv>
+            """.trimIndent().encodeToByteArray(),
+        )
+        val merged = first + second
+        assertEquals(listOf("News", "Sports", "Late film"), merged.programmesFor(Channel("a", "s", "TV1", "g", "u")).map { it.title })
+        assertEquals(listOf("Uutiset"), merged.programmesFor(Channel("b", "s", "MTV3", "g", "u")).map { it.title })
+    }
 }

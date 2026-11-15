@@ -50,44 +50,82 @@ class Repository(private val store: FileStore) {
 
     suspend fun fetchChannels(source: Source): List<Channel> = withContext(Dispatchers.Default) {
         val channels = when (source.type) {
-            SourceType.M3U_URL -> M3uParser.parse(client.get(source.url.trim()).bodyAsText(), source.id)
-            SourceType.M3U_FILE -> M3uParser.parse(readLocalFile(source.url.trim()), source.id)
+            SourceType.M3U_URL -> rememberGuides(source, M3uParser.parsePlaylist(client.get(source.url.trim()).bodyAsText(), source.id))
+            SourceType.M3U_FILE -> rememberGuides(source, M3uParser.parsePlaylist(readLocalFile(source.url.trim()), source.id))
             SourceType.XTREAM -> xtream.liveChannels(source)
         }
         store.writeText(channelsFile(source.id), json.encodeToString(ListSerializer(Channel.serializer()), channels))
         channels
     }
 
+    private fun rememberGuides(source: Source, playlist: M3uPlaylist): List<Channel> {
+        store.writeText(guidesFile(source.id), playlist.guideUrls.joinToString("\n"))
+        return playlist.channels
+    }
+
     // ---- EPG ----------------------------------------------------------------
 
-    fun epgUrlFor(source: Source): String? = when {
-        source.epgUrl.isNotBlank() -> source.epgUrl.trim()
-        source.type == SourceType.XTREAM -> xtream.epgUrl(source)
-        else -> null
+    /** Guide URLs named in the playlist's header, from the last refresh. */
+    fun playlistGuides(sourceId: String): List<String> =
+        store.readText(guidesFile(sourceId))?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+
+    /**
+     * Where the guide comes from: the user's URL(s) if set (comma-separated for several), else the Xtream
+     * provider's xmltv.php, else whatever the M3U header names.
+     */
+    fun epgUrlsFor(source: Source): List<String> = when {
+        source.epgUrl.isNotBlank() -> source.epgUrl.split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
+        source.type == SourceType.XTREAM -> listOf(xtream.epgUrl(source))
+        else -> playlistGuides(source.id)
     }
 
     suspend fun cachedEpg(sourceId: String): EpgData = withContext(Dispatchers.Default) {
-        runCatching { store.readBytes(epgFile(sourceId))?.let(::parseXmltv) }.getOrNull() ?: EpgData()
+        // epg_<id>.xml is the single-guide file from older versions.
+        (listOf(legacyEpgFile(sourceId)) + (0 until MAX_GUIDES).map { epgFile(sourceId, it) })
+            .mapNotNull { name -> runCatching { store.readBytes(name)?.let(::parseXmltv) }.getOrNull() }
+            .fold(EpgData()) { all, next -> all + next }
     }
 
+    /** Downloads every guide for the source and merges them. One failing guide doesn't sink the others. */
     suspend fun fetchEpg(source: Source): EpgData = withContext(Dispatchers.Default) {
-        val url = epgUrlFor(source) ?: return@withContext EpgData()
-        val bytes = client.get(url).bodyAsBytes()
-        val epg = parseXmltv(bytes)
-        if (!epg.isEmpty) store.writeBytes(epgFile(source.id), bytes)
-        epg
+        val urls = epgUrlsFor(source).take(MAX_GUIDES)
+        if (urls.isEmpty()) return@withContext EpgData()
+        var merged = EpgData()
+        var firstError: Exception? = null
+        urls.forEachIndexed { index, url ->
+            try {
+                val bytes = client.get(url).bodyAsBytes()
+                val epg = parseXmltv(bytes)
+                if (!epg.isEmpty) {
+                    store.writeBytes(epgFile(source.id, index), bytes)
+                    merged += epg
+                }
+            } catch (e: Exception) {
+                if (firstError == null) firstError = e
+            }
+        }
+        // Drop cached guides that are no longer listed.
+        (urls.size until MAX_GUIDES).forEach { store.delete(epgFile(source.id, it)) }
+        store.delete(legacyEpgFile(source.id))
+        if (merged.isEmpty) firstError?.let { throw it }
+        merged
     }
 
     fun deleteSourceData(sourceId: String) {
         store.delete(channelsFile(sourceId))
-        store.delete(epgFile(sourceId))
+        store.delete(guidesFile(sourceId))
+        store.delete(legacyEpgFile(sourceId))
+        (0 until MAX_GUIDES).forEach { store.delete(epgFile(sourceId, it)) }
     }
 
     private fun channelsFile(sourceId: String) = "channels_$sourceId.json"
-    private fun epgFile(sourceId: String) = "epg_$sourceId.xml"
+    private fun guidesFile(sourceId: String) = "guides_$sourceId.txt"
+    private fun legacyEpgFile(sourceId: String) = "epg_$sourceId.xml"
+    private fun epgFile(sourceId: String, index: Int) = "epg_${sourceId}_$index.xml"
 
     private companion object {
         const val SETTINGS = "settings.json"
         const val SOURCES = "sources.json"
+        const val MAX_GUIDES = 8
     }
 }

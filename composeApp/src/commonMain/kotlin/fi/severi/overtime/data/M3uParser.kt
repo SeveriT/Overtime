@@ -2,8 +2,30 @@ package fi.severi.overtime.data
 
 import fi.severi.overtime.model.Channel
 
+/** Channels plus any XMLTV guide URLs the playlist's #EXTM3U header names. */
+class M3uPlaylist(val channels: List<Channel>, val guideUrls: List<String>)
+
 object M3uParser {
     private val attrRegex = Regex("([\\w-]+)=\"([^\"]*)\"")
+
+    /** Header attributes that point at a guide; values may list several URLs separated by commas. */
+    private val guideAttributes = setOf("x-tvg-url", "url-tvg", "tvg-url")
+
+    fun parsePlaylist(text: String, sourceId: String): M3uPlaylist {
+        val header = text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
+        val guides = if (header.startsWith("#EXTM3U", ignoreCase = true)) {
+            attrRegex.findAll(header)
+                .filter { it.groupValues[1].lowercase() in guideAttributes }
+                .flatMap { it.groupValues[2].split(',') }
+                .map { it.trim() }
+                .filter { it.startsWith("http://") || it.startsWith("https://") }
+                .distinct()
+                .toList()
+        } else {
+            emptyList()
+        }
+        return M3uPlaylist(parse(text, sourceId), guides)
+    }
 
     fun parse(text: String, sourceId: String): List<Channel> {
         val channels = ArrayList<Channel>()

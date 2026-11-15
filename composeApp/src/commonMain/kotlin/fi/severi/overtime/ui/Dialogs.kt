@@ -212,8 +212,15 @@ fun SourcesDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(source.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                val playlistGuides = remember(source, busy) { vm.playlistGuideCount(source.id) }
+                                val guideNote = when {
+                                    source.epgUrl.isNotBlank() -> " · custom guide"
+                                    source.type != SourceType.XTREAM && playlistGuides == 1 -> " · guide from playlist"
+                                    source.type != SourceType.XTREAM && playlistGuides > 1 -> " · $playlistGuides guides from playlist"
+                                    else -> ""
+                                }
                                 Text(
-                                    "${source.type.label} · ${source.url}" + if (source.epgUrl.isNotBlank()) " · custom guide" else "",
+                                    "${source.type.label} · ${source.url}$guideNote",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -286,8 +293,8 @@ fun SourcesDialog(vm: AppViewModel, onDismiss: () -> Unit) {
             label = { Text("XMLTV guide URL (optional)") },
             supportingText = {
                 Text(
-                    if (type == SourceType.XTREAM) "Leave empty to use the provider's own guide. Gzipped (.xml.gz) guides work too."
-                    else "Gzipped (.xml.gz) guides work too.",
+                    if (type == SourceType.XTREAM) "Leave empty to use the provider's own guide. Separate several URLs with commas."
+                    else "Leave empty to use the guide the playlist names, if any. Separate several URLs with commas.",
                 )
             },
             singleLine = true,

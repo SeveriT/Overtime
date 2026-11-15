@@ -57,6 +57,17 @@ data class EpgData(
         return nameToId[name.removeSuffix(" hd").removeSuffix(" fhd").removeSuffix(" uhd").trim()]
     }
 
+    /** Combines two guides; where both list a channel, programmes are merged and de-duplicated by start time. */
+    operator fun plus(other: EpgData): EpgData {
+        if (isEmpty) return other
+        if (other.isEmpty) return this
+        val merged = HashMap(programmes)
+        other.programmes.forEach { (id, list) ->
+            merged[id] = merged[id]?.let { mine -> (mine + list).distinctBy { it.start }.sortedBy { it.start } } ?: list
+        }
+        return EpgData(nameToId = other.nameToId + nameToId, programmes = merged)
+    }
+
     /** All programmes for a channel, sorted by start; empty if the guide doesn't know it. */
     fun programmesFor(channel: Channel): List<Programme> = resolveId(channel)?.let(programmes::get).orEmpty()
 

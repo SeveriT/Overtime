@@ -40,6 +40,18 @@ class M3uParserTest {
     }
 
     @Test
+    fun readsGuideUrlsFromHeader() {
+        val text = "#EXTM3U x-tvg-url=\"http://a.example/guide.xml.gz, https://b.example/epg.xml\" url-tvg=\"http://a.example/guide.xml.gz\"\n" +
+            "#EXTINF:-1,One\nhttp://example.com/1.ts"
+        val playlist = M3uParser.parsePlaylist(text, "src")
+        assertEquals(listOf("http://a.example/guide.xml.gz", "https://b.example/epg.xml"), playlist.guideUrls)
+        assertEquals(1, playlist.channels.size)
+        assertEquals(emptyList(), M3uParser.parsePlaylist(playlistWithoutHeader, "src").guideUrls)
+    }
+
+    private val playlistWithoutHeader = "#EXTINF:-1,One\nhttp://example.com/1.ts"
+
+    @Test
     fun idsAreStableAcrossRuns() {
         val a = M3uParser.parse(playlist, "src").map { it.id }
         val b = M3uParser.parse(playlist, "src").map { it.id }

@@ -306,8 +306,9 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
             try {
                 val channels = repo.fetchChannels(source)
                 _channels.update { it + (source.id to channels) }
-                if (repo.epgUrlFor(source) != null) {
-                    busy.value = "Loading guide for ${source.name}…"
+                val guides = repo.epgUrlsFor(source).size
+                if (guides > 0) {
+                    busy.value = if (guides == 1) "Loading guide for ${source.name}…" else "Loading $guides guides for ${source.name}…"
                     val epg = repo.fetchEpg(source)
                     _epg.update { it + (source.id to epg) }
                 }
@@ -320,6 +321,9 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     }
 
     fun refreshAll() = _sources.value.forEach { refreshSource(it.id) }
+
+    /** How many guides an M3U playlist's own header names (shown in the sources list). */
+    fun playlistGuideCount(sourceId: String): Int = repo.playlistGuides(sourceId).size
 
     // ---- settings -------------------------------------------------------------
 
