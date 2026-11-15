@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -227,7 +228,9 @@ fun PlayerPane(
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize(),
         ) {
-            Box(Modifier.fillMaxSize()) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                // Too narrow for one row of buttons (about 880 dp with everything shown, plus a margin).
+                val compactToolbar = maxWidth < COMPACT_TOOLBAR_WIDTH
                 channel?.let { ch ->
                     val (now, next) = remember(ch.id, clock) { vm.nowNext(ch, clock) }
                     Column(
@@ -318,6 +321,7 @@ fun PlayerPane(
                     timeshift = state.timeshift,
                     media = state.media,
                     onDemand = vod != null,
+                    compact = compactToolbar,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
                 )
                 }
@@ -354,9 +358,11 @@ private fun PlayerToolbar(
     timeshift: TimeshiftState?,
     media: MediaProgress?,
     onDemand: Boolean,
+    /** Buttons in two rows, for a narrow player. */
+    compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val twoRows = timeshift != null || media != null
+    val twoRows = timeshift != null || media != null || compact
     val shape = if (twoRows) MaterialTheme.shapes.extraLargeIncreased else CircleShape
     FloatingPill(modifier, shape) {
         Column(
@@ -376,7 +382,7 @@ private fun PlayerToolbar(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp),
                 )
             }
-            ToolbarButtons(vm, paused, muted, volume, fullscreen, sidebarVisible, timeshift, media, onDemand)
+            ToolbarButtons(vm, paused, muted, volume, fullscreen, sidebarVisible, timeshift, media, onDemand, compact)
         }
     }
 }
@@ -425,22 +431,19 @@ private fun ToolbarButtons(
     timeshift: TimeshiftState?,
     media: MediaProgress?,
     onDemand: Boolean,
+    compact: Boolean,
 ) {
     val canSkip = timeshift != null || media != null
     // Movies seek with plain arrows; live TV uses Shift so the arrows can change channel.
     val skipKey = if (onDemand) "" else "Shift+"
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+    val navigation: @Composable () -> Unit = {
             ToolbarButton(
                 if (sidebarVisible) Icons.AutoMirrored.Filled.MenuOpen else Icons.Default.Menu,
                 if (sidebarVisible) "Hide sidebar (S)" else "Show sidebar (S)",
             ) { vm.toggleSidebar() }
             if (!onDemand) ToolbarButton(Icons.Outlined.ViewTimeline, "Programme guide (G)") { vm.openGuide() }
-
-            VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
+    }
+    val transport: @Composable () -> Unit = {
             if (!onDemand) ToolbarButton(Icons.Default.SkipPrevious, "Previous channel (←)") { vm.step(-1) }
             if (canSkip) {
                 ToolbarButton(Icons.Default.Replay10, "Back 10 seconds (${skipKey}←)") { vm.seekBy(-REWIND_STEP_MS) }
@@ -469,8 +472,8 @@ private fun ToolbarButtons(
             ToolbarButton(Icons.Default.Stop, if (onDemand) "Stop and open Movies & series" else "Stop") {
                 if (onDemand) vm.stopToLibrary() else vm.stopPlayback()
             }
-
-            VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
+    }
+    val outputs: @Composable () -> Unit = {
 
             WithTooltip(if (muted) "Unmute (M)" else "Mute (M)") {
                 FilledTonalIconToggleButton(
@@ -489,8 +492,33 @@ private fun ToolbarButtons(
                 if (fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                 if (fullscreen) "Exit fullscreen (F)" else "Fullscreen (F)",
             ) { vm.toggleFullscreen() }
+    }
+    val divider: @Composable () -> Unit = {
+        VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
+    }
+    if (compact) {
+        // Narrow window: playback controls on their own row, the rest below.
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { transport() }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                navigation()
+                divider()
+                outputs()
+            }
         }
+    } else {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            navigation()
+            divider()
+            transport()
+            divider()
+            outputs()
+        }
+    }
 }
+
+/** Below this player width the toolbar buttons wrap onto two rows. */
+private val COMPACT_TOOLBAR_WIDTH = 904.dp
 
 /** Toolbar menus report opening and closing so the controls stay up meanwhile. */
 private val LocalMenuOpenChange = staticCompositionLocalOf<(Boolean) -> Unit> { {} }

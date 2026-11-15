@@ -78,6 +78,10 @@ class ScreenshotTest {
         player.mutableState.value = player.mutableState.value.copy(paused = false, timeshift = null)
         shoot(outDir, "6_no_rewind", 1280, 800) { App(vm) }
 
+        // A narrow window: the toolbar wraps its buttons onto two rows under the rewind bar.
+        player.mutableState.value = player.mutableState.value.copy(timeshift = timeshift(behindMs = 2_000))
+        shoot(outDir, "7_narrow", 1000, 700) { App(vm) }
+
         vm.shutdown()
         dataDir.deleteRecursively()
     }
