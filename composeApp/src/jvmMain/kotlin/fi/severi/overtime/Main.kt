@@ -77,6 +77,7 @@ fun main() = application {
                 Key.Spacebar -> { vm.player.togglePause(); true }
                 Key.M -> { vm.player.toggleMute(); true }
                 Key.S -> { vm.toggleSidebar(); true }
+                Key.I -> { vm.toggleStats(); true }
                 Key.DirectionLeft -> { if (event.isShiftPressed) vm.seekBy(-REWIND_STEP_MS) else vm.step(-1); true }
                 Key.DirectionRight -> { if (event.isShiftPressed) vm.seekBy(REWIND_STEP_MS) else vm.step(1); true }
                 Key.PageUp -> { vm.step(-1); true }

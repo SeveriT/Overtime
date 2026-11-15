@@ -23,6 +23,27 @@ data class TimeshiftState(
     val isLive: Boolean get() = behindMs <= liveToleranceMs
 }
 
+/** Snapshot for the stream info panel. Unknown values are null. */
+data class StreamStats(
+    val width: Int?,
+    val height: Int?,
+    /** Frame rate declared by the stream. */
+    val frameRate: Double?,
+    /** Frames actually drawn per second, measured over the last interval. */
+    val measuredFps: Double?,
+    val videoCodec: String?,
+    val bitrateKbps: Int?,
+    val droppedFrames: Int?,
+    val displayedFrames: Int?,
+    val audioCodec: String?,
+    val audioChannels: Int?,
+    val audioSampleRate: Int?,
+    /** How the stream reaches the player, e.g. "HLS · recorded for rewind". */
+    val source: String,
+    val bufferMs: Long?,
+    val bufferBytes: Long?,
+)
+
 data class PlayerState(
     val playing: Boolean = false,
     val paused: Boolean = false,
@@ -53,6 +74,9 @@ interface VideoPlayer {
 
     /** Returns to the live edge. */
     fun goLive() = Unit
+
+    /** Current stream details for the info panel; null when nothing is playing. */
+    fun streamStats(): StreamStats? = null
 }
 
 /** Draws the player's current video frame, letterboxed inside the given bounds. */

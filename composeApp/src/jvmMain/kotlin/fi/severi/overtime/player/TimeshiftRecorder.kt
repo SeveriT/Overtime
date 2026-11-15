@@ -80,6 +80,10 @@ class TimeshiftRecorder(
     @Volatile var liveDelayMs: Long = readyAfterMs
         private set
 
+    /** "MPEG-TS" or "HLS" once the stream type is known. */
+    @Volatile var formatLabel: String? = null
+        private set
+
     /** How much the live edge jumps at once: one segment for HLS, nothing for continuous TS. */
     @Volatile var edgeStepMs: Long = 0L
         private set
@@ -167,6 +171,7 @@ class TimeshiftRecorder(
                 val input = BufferedInputStream(conn.inputStream, 64 * 1024)
                 if (format == null) {
                     format = detect(input) ?: throw UnsupportedStream("Not an MPEG-TS or HLS stream")
+                    formatLabel = if (format == Format.HLS) "HLS" else "MPEG-TS"
                 }
                 val before = written
                 when (format) {

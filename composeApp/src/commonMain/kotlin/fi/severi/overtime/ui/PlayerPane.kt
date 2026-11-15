@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.FilledIconButton
@@ -177,7 +178,7 @@ fun PlayerPane(
             visible = timeshift != null && !timeshift.isLive && !overlayVisible,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
+            modifier = Modifier.align(Alignment.TopStart).padding(24.dp),
         ) {
             FloatingPill {
                 Row(
@@ -251,6 +252,17 @@ fun PlayerPane(
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
                 )
             }
+        }
+
+        // Stream info stays up independently of the auto-hiding controls, like mpv's stats overlay.
+        val statsVisible by vm.statsVisible.collectAsState()
+        AnimatedVisibility(
+            visible = statsVisible && channel != null,
+            enter = fadeIn() + scaleIn(initialScale = 0.95f),
+            exit = fadeOut() + scaleOut(targetScale = 0.95f),
+            modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
+        ) {
+            StreamInfoPanel(vm)
         }
     }
 }
@@ -350,6 +362,16 @@ private fun ToolbarButtons(
             }
             VolumeSlider(volume, muted, onVolumeChange = vm::setVolume, modifier = Modifier.width(150.dp))
 
+            val statsVisible by vm.statsVisible.collectAsState()
+            WithTooltip(if (statsVisible) "Hide stream info (I)" else "Stream info (I)") {
+                FilledTonalIconToggleButton(
+                    checked = statsVisible,
+                    onCheckedChange = { vm.toggleStats() },
+                    shapes = IconButtonDefaults.toggleableShapes(),
+                ) {
+                    Icon(Icons.Outlined.Info, contentDescription = "Stream info")
+                }
+            }
             ToolbarButton(
                 if (fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                 if (fullscreen) "Exit fullscreen (F)" else "Fullscreen (F)",

@@ -197,6 +197,11 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     fun goLive() = player.goLive()
 
+    /** Stream info panel (resolution, fps, codecs…), toggled with the toolbar button or I. */
+    val statsVisible = MutableStateFlow(false)
+
+    fun toggleStats() = statsVisible.update { !it }
+
     /** Moves to the previous (-1) or next (+1) channel within the selected group. */
     fun step(delta: Int) {
         val list = channelsIn(selectedGroup.value)

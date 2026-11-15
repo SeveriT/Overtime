@@ -40,6 +40,7 @@ import uk.co.caprica.vlcj.player.embedded.videosurface.callback.format.RV32Buffe
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -236,7 +237,55 @@ class VlcPlayer : VideoPlayer {
 
     override fun goLive() = seekTo(Long.MAX_VALUE)
 
+    // ---- stream info ------------------------------------------------------------------
+
+    private val framesDrawn = AtomicLong()
+    private var fpsSampleAt = 0L
+    private var fpsSampleFrames = 0L
+
+    override fun streamStats(): StreamStats? {
+        val info = player.media().info() ?: return null
+        val videoTrackId = player.video().track()
+        val video = info.videoTracks().let { tracks -> tracks.firstOrNull { it.id() == videoTrackId } ?: tracks.firstOrNull() }
+        val audioTrackId = player.audio().track()
+        val audio = info.audioTracks().let { tracks -> tracks.firstOrNull { it.id() == audioTrackId } ?: tracks.firstOrNull() }
+        val stats = info.statistics()
+
+        // Measured fps over the time since the previous call (the panel polls about once a second).
+        val now = System.currentTimeMillis()
+        val frames = framesDrawn.get()
+        val measured = if (fpsSampleAt != 0L && now - fpsSampleAt in 250..5_000) {
+            (frames - fpsSampleFrames) * 1000.0 / (now - fpsSampleAt)
+        } else {
+            null
+        }
+        fpsSampleAt = now
+        fpsSampleFrames = frames
+
+        val rec = recorder
+        val dimension = player.video().videoDimension()
+        return StreamStats(
+            width = video?.width()?.takeIf { it > 0 } ?: dimension?.width,
+            height = video?.height()?.takeIf { it > 0 } ?: dimension?.height,
+            frameRate = video?.takeIf { it.frameRate() > 0 && it.frameRateBase() > 0 }
+                ?.let { it.frameRate().toDouble() / it.frameRateBase() },
+            measuredFps = measured,
+            videoCodec = video?.let { describeVideoCodec(it.codecName(), it.codecDescription(), it.profile(), it.level()) },
+            // libVLC reports bytes per millisecond (×8000 = kbit/s), as VLC's own statistics dialog does.
+            bitrateKbps = stats?.demuxBitrate()?.takeIf { it > 0f }?.let { (it * 8000).toInt() },
+            droppedFrames = stats?.picturesLost(),
+            displayedFrames = stats?.picturesDisplayed(),
+            audioCodec = audio?.let { describeAudioCodec(it.codecName(), it.codecDescription()) },
+            audioChannels = audio?.channels()?.takeIf { it > 0 },
+            audioSampleRate = audio?.rate()?.takeIf { it > 0 },
+            source = if (rec != null) "${rec.formatLabel ?: "Stream"} · recorded for rewind" else "Direct",
+            bufferMs = rec?.let { it.liveWall - it.earliestWall },
+            bufferBytes = rec?.let { it.latestOffset - it.earliestOffset },
+        )
+    }
+
     private fun renderFrame(buffer: ByteBuffer, format: BufferFormat) {
+        framesDrawn.incrementAndGet()
         val info = imageInfo ?: return
         val source = buffer.duplicate()
         source.clear()
