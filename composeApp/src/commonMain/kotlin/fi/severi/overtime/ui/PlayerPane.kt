@@ -410,7 +410,7 @@ private fun ToolbarButtons(
                 if (sidebarVisible) Icons.AutoMirrored.Filled.MenuOpen else Icons.Default.Menu,
                 if (sidebarVisible) "Hide $sidebarName (S)" else "Show $sidebarName (S)",
             ) { vm.toggleSidebar() }
-            ToolbarButton(Icons.Outlined.ViewTimeline, "Programme guide (G)") { vm.openGuide() }
+            if (!onDemand) ToolbarButton(Icons.Outlined.ViewTimeline, "Programme guide (G)") { vm.openGuide() }
             if (hasLibrary) {
                 ToolbarButton(Icons.Outlined.VideoLibrary, "Movies & series (L)") { vm.openLibrary() }
             }
