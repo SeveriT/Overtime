@@ -89,6 +89,8 @@ data class AppSettings(
     val networkCachingMs: Int = 1500,
     val groupSort: GroupSort = GroupSort.PLAYLIST,
     val sidebarVisible: Boolean = true,
+    /** Sidebar width in dp, set by dragging its edge. */
+    val sidebarWidth: Int = 360,
     /** Sidebar and title bar colour as #RRGGBB; null uses the theme default. */
     val sidebarColor: String? = null,
     /** Accent (primary) colour as #RRGGBB; null uses the theme default blue. */
