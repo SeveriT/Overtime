@@ -18,17 +18,35 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.disk.DiskCache
+import coil3.request.crossfade
 import fi.severi.overtime.AppViewModel
 import fi.severi.overtime.model.AppSettings
+import okio.Path.Companion.toPath
 
 /** Sidebar width limits; the default is the M3 standard navigation drawer width. */
 private const val SIDEBAR_MIN_DP = 280f
 private const val SIDEBAR_MAX_DP = 720f
 private const val SIDEBAR_MAX_SHARE = 0.6f
 private val DEFAULT_SIDEBAR_DP = AppSettings().sidebarWidth.toFloat()
+private const val IMAGE_CACHE_BYTES = 300L * 1024 * 1024
 
 @Composable
 fun App(vm: AppViewModel) {
+    // Posters and logos are cached on disk so library rows don't re-download artwork every visit.
+    setSingletonImageLoaderFactory { context ->
+        ImageLoader.Builder(context)
+            .diskCache {
+                DiskCache.Builder()
+                    .directory("${vm.dataDirectory}/image-cache".toPath())
+                    .maxSizeBytes(IMAGE_CACHE_BYTES)
+                    .build()
+            }
+            .crossfade(true)
+            .build()
+    }
     val settings by vm.settings.collectAsState()
     OvertimeTheme(accent = accentColorOf(settings.accentColor)) {
         val sources by vm.sources.collectAsState()

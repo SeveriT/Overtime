@@ -10,6 +10,7 @@ import fi.severi.overtime.model.LibraryKind
 import fi.severi.overtime.model.MovieDetails
 import fi.severi.overtime.model.SeriesDetails
 import fi.severi.overtime.model.Source
+import fi.severi.overtime.model.WatchProgress
 import fi.severi.overtime.model.SourceType
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -68,6 +69,15 @@ class Repository(private val store: FileStore) {
         store.writeText(guidesFile(source.id), playlist.guideUrls.joinToString("\n"))
         return playlist.channels
     }
+
+    // ---- watch progress -----------------------------------------------------
+
+    fun loadProgress(): List<WatchProgress> =
+        runCatching { store.readText(PROGRESS)?.let { json.decodeFromString(ListSerializer(WatchProgress.serializer()), it) } }
+            .getOrNull() ?: emptyList()
+
+    fun saveProgress(entries: List<WatchProgress>) =
+        store.writeText(PROGRESS, json.encodeToString(ListSerializer(WatchProgress.serializer()), entries))
 
     // ---- movies & series (Xtream) -------------------------------------------
 
@@ -150,6 +160,7 @@ class Repository(private val store: FileStore) {
     private companion object {
         const val SETTINGS = "settings.json"
         const val SOURCES = "sources.json"
+        const val PROGRESS = "progress.json"
         const val MAX_GUIDES = 8
     }
 }

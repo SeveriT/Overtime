@@ -215,8 +215,14 @@ class VlcPlayer : VideoPlayer {
         return playedBeforeMs + if (since != 0L) System.currentTimeMillis() - since else 0L
     }
 
-    private fun playDirect(url: String, networkCachingMs: Int, userAgent: String) {
-        player.media().play(url, ":network-caching=$networkCachingMs", ":http-user-agent=$userAgent")
+    private fun playDirect(url: String, networkCachingMs: Int, userAgent: String, startMs: Long = 0) {
+        val options = listOfNotNull(
+            ":network-caching=$networkCachingMs",
+            ":http-user-agent=$userAgent",
+            // Resume part-way into an on-demand file.
+            if (startMs > 0) ":start-time=${startMs / 1000.0}" else null,
+        )
+        player.media().play(url, *options.toTypedArray())
     }
 
     private suspend fun runSession(rec: TimeshiftRecorder, url: String, networkCachingMs: Int, userAgent: String) {
@@ -360,7 +366,7 @@ class VlcPlayer : VideoPlayer {
         _frame.value = Image.makeRaster(info, pixels, format.pitches[0]).toComposeImageBitmap()
     }
 
-    override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long) {
+    override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long, startMs: Long) {
         synchronized(sessionLock) {
             endSession()
             _state.update {
@@ -368,7 +374,7 @@ class VlcPlayer : VideoPlayer {
             }
             if (rewindBufferMs <= 0) {
                 _frame.value = null; yuv.clear()
-                playDirect(url, networkCachingMs, userAgent)
+                playDirect(url, networkCachingMs, userAgent, startMs)
                 return
             }
             // Start this far behind live so short network hiccups never starve playback.

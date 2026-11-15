@@ -65,8 +65,11 @@ data class PlayerState(
 interface VideoPlayer {
     val state: StateFlow<PlayerState>
 
-    /** Plays [url]; with [rewindBufferMs] > 0 the stream is recorded so it can be paused and rewound. */
-    fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long = 0)
+    /**
+     * Plays [url]; with [rewindBufferMs] > 0 the stream is recorded so it can be paused and rewound.
+     * [startMs] starts an on-demand file part-way through (resume).
+     */
+    fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long = 0, startMs: Long = 0)
     fun stop()
     fun togglePause()
     fun setVolume(volume: Int)

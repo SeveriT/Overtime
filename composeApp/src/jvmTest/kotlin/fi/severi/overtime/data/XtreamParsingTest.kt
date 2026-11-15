@@ -35,6 +35,21 @@ class XtreamParsingTest {
     }
 
     @Test
+    fun readsArtworkIds() {
+        val movie = api.parseItem(
+            obj("""{"stream_id": 1, "name": "Inception", "tmdb_id": "27205", "category_id": "1"}"""),
+            LibraryKind.MOVIES,
+        )!!
+        assertEquals("27205", movie.tmdbId)
+        val series = api.parseItem(
+            obj("""{"series_id": 2, "name": "Breaking Bad", "tmdb": 1396, "backdrop_path": ["http://img/bb.jpg"], "category_id": "1"}"""),
+            LibraryKind.SERIES,
+        )!!
+        assertEquals("1396", series.tmdbId)
+        assertEquals("http://img/bb.jpg", series.backdrop)
+    }
+
+    @Test
     fun readsSeries() {
         val series = api.parseItem(
             obj("""{"series_id": 88, "name": "Dark", "cover": "http://img/dark.jpg", "releaseDate": "2017-12-01", "category_id": "3"}"""),

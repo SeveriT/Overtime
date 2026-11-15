@@ -109,11 +109,48 @@ data class AppSettings(
     /** Record live streams so they can be paused and rewound. */
     val rewindEnabled: Boolean = true,
     val rewindMinutes: Int = 5,
+    // Library poster cards
+    val posterWidth: PosterWidth = PosterWidth.BALANCED,
+    val posterCorners: PosterCorners = PosterCorners.CLASSIC,
+    val landscapePosters: Boolean = false,
+    val hidePosterLabels: Boolean = false,
+    /** Rated artwork from [posterTemplate] when a title has a TMDB or IMDb ID. */
+    val ratedPosters: Boolean = true,
+    val posterTemplate: String = DEFAULT_POSTER_TEMPLATE,
     val lastSourceId: String? = null,
     val lastChannelId: String? = null,
     val favorites: Set<String> = emptySet(),
     val volume: Int = 100,
 )
+
+@Serializable
+enum class PosterWidth(val label: String, val dp: Int) {
+    COMPACT("Compact", 100),
+    DENSE("Dense", 120),
+    STANDARD("Standard", 140),
+    BALANCED("Balanced", 160),
+    COMFORT("Comfort", 180),
+    LARGE("Large", 200),
+}
+
+@Serializable
+enum class PosterCorners(val label: String, val dp: Int) {
+    SHARP("Sharp", 0),
+    SUBTLE("Subtle", 4),
+    CLASSIC("Classic", 8),
+    ROUNDED("Rounded", 16),
+    PILL("Pill", 28),
+}
+
+/**
+ * PostersPlus artwork with rating bars and badges. Placeholders: {tmdb_id} {imdb_id} {id} {type} {shape};
+ * a trailing ? ({tmdb_id?}) makes one optional.
+ */
+const val DEFAULT_POSTER_TEMPLATE =
+    "https://postersplus.slokker.cc/poster?tmdb_id={tmdb_id?}&imdb_id={imdb_id?}&stremio_id={id}&type={type}" +
+        "&shape={shape}&pc=stremio_tv_nuvio&tg=medium&sm=notch&tst=number&_sm=sash&bp=top_left&fti=1&rdm=2" +
+        "&nsfsr=0.050&nsyo=0.93&rb=imdb,metacritic,popcorn,tomatoes&mw=lb:.99,tk:.01&tw=tk:.8,rt:.2&fbs=photoreal" +
+        "&sws=1&sbsw=1.40&sbsh=1.20&sbpo=right&bdm=7&bms=5"
 
 data class GroupEntry(val name: String, val count: Int)
 

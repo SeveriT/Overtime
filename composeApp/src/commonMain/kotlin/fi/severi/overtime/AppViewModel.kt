@@ -7,7 +7,11 @@ import fi.severi.overtime.model.Channel
 import fi.severi.overtime.model.EpgData
 import fi.severi.overtime.model.Episode
 import fi.severi.overtime.model.LibraryItem
+import fi.severi.overtime.model.LibraryKind
+import fi.severi.overtime.model.MovieDetails
 import fi.severi.overtime.model.Season
+import fi.severi.overtime.model.SeriesDetails
+import fi.severi.overtime.model.WatchProgress
 import fi.severi.overtime.model.SourceType
 import fi.severi.overtime.model.VodPlayback
 import fi.severi.overtime.model.GROUP_ALL
@@ -199,27 +203,169 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         library.open()
     }
 
-    fun playMovie(item: LibraryItem) {
+    fun playMovie(item: LibraryItem, details: MovieDetails? = null, fromStart: Boolean = false) {
         val source = library.source() ?: return
-        playVod(repo.movieUrl(source, item), VodPlayback(item.name, item.year, item.poster))
+        val entry = WatchProgress(
+            key = "m:${source.id}:${item.id}",
+            sourceId = source.id,
+            kind = LibraryKind.MOVIES,
+            itemId = item.id,
+            title = item.name,
+            extension = item.extension ?: "mp4",
+            positionMs = 0,
+            durationMs = 0,
+            updatedAt = nowMillis(),
+            poster = item.poster,
+            backdrop = details?.backdrop ?: item.backdrop,
+            tmdbId = item.tmdbId ?: details?.tmdbId,
+            imdbId = item.imdbId ?: details?.imdbId,
+        )
+        startVod(repo.movieUrl(source, item), VodPlayback(item.name, item.year, item.poster), entry, next = null, fromStart = fromStart)
     }
 
-    fun playEpisode(series: LibraryItem, season: Season, episode: Episode) {
+    fun playEpisode(series: LibraryItem, details: SeriesDetails, season: Season, episode: Episode) {
         val source = library.source() ?: return
-        val label = "S${season.number} E${episode.number}" + episode.title.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
-        playVod(repo.episodeUrl(source, episode), VodPlayback(series.name, label, episode.image ?: series.poster))
+        val entry = episodeEntry(source.id, series, details, season, episode)
+        val next = nextEpisodeAfter(details, season, episode)?.let { (s, e) -> episodeEntry(source.id, series, details, s, e) }
+        startVod(repo.episodeUrl(source, episode), episodePlayback(entry), entry, next)
+    }
+
+    /** Plays a Continue watching card: resumes where it stopped, or starts a queued next episode. */
+    fun resume(entry: WatchProgress) {
+        val source = _sources.value.firstOrNull { it.id == entry.sourceId } ?: return
+        if (entry.episodeId == null) {
+            val item = LibraryItem(entry.itemId, LibraryKind.MOVIES, entry.title, entry.poster, null, null, "", entry.extension)
+            startVod(repo.movieUrl(source, item), VodPlayback(entry.title, null, entry.poster), entry.copy(nextUp = false), next = null)
+            return
+        }
+        val episode = Episode(entry.episodeId, entry.episode ?: 0, entry.episodeTitle.orEmpty(), entry.extension, null, null, null)
+        startVod(repo.episodeUrl(source, episode), episodePlayback(entry), entry.copy(nextUp = false), next = null)
+        // Find what comes after it in the background, so finishing this one queues the next.
+        val series = LibraryItem(entry.itemId, LibraryKind.SERIES, entry.title, entry.poster, null, null, "", null)
+        scope.launch {
+            val details = runCatching { repo.seriesDetails(source, series) }.getOrNull() ?: return@launch
+            val season = details.seasons.firstOrNull { it.number == entry.season } ?: return@launch
+            val current = season.episodes.firstOrNull { it.id == entry.episodeId } ?: return@launch
+            val next = nextEpisodeAfter(details, season, current) ?: return@launch
+            if (playingEntry?.key == entry.key) nextEpisode = episodeEntry(source.id, series.copy(backdrop = entry.backdrop), details, next.first, next.second)
+        }
+    }
+
+    fun forget(entry: WatchProgress) = history.remove(entry.key)
+
+    private fun episodeEntry(sourceId: String, series: LibraryItem, details: SeriesDetails?, season: Season, episode: Episode) =
+        WatchProgress(
+            key = "e:$sourceId:${episode.id}",
+            sourceId = sourceId,
+            kind = LibraryKind.SERIES,
+            itemId = series.id,
+            title = series.name,
+            extension = episode.extension,
+            positionMs = 0,
+            durationMs = 0,
+            updatedAt = nowMillis(),
+            episodeId = episode.id,
+            season = season.number,
+            episode = episode.number,
+            episodeTitle = episode.title.ifBlank { null },
+            poster = series.poster,
+            backdrop = episode.image ?: details?.backdrop ?: series.backdrop,
+            tmdbId = series.tmdbId ?: details?.tmdbId,
+            imdbId = series.imdbId ?: details?.imdbId,
+        )
+
+    private fun episodePlayback(entry: WatchProgress) = VodPlayback(
+        entry.title,
+        "S${entry.season} E${entry.episode}" + entry.episodeTitle?.let { " · $it" }.orEmpty(),
+        entry.poster,
+    )
+
+    private fun nextEpisodeAfter(details: SeriesDetails, season: Season, episode: Episode): Pair<Season, Episode>? {
+        val ordered = details.seasons.flatMap { s -> s.episodes.map { s to it } }
+        val index = ordered.indexOfFirst { it.second.id == episode.id }
+        return ordered.getOrNull(index + 1)
+    }
+
+    // ---- watch progress -------------------------------------------------------------
+
+    val history = WatchHistory(repo.loadProgress(), repo::saveProgress)
+
+    val continueWatching: StateFlow<List<WatchProgress>> = history.entries
+        .map { WatchHistory.continueWatching(it) }
+        .stateIn(scope, SharingStarted.Eagerly, WatchHistory.continueWatching(history.entries.value))
+
+    /** The movie or episode playing; its position is filled in as it plays. */
+    @kotlin.concurrent.Volatile private var playingEntry: WatchProgress? = null
+
+    /** For series: the episode after the one playing, queued as Next up when it finishes. */
+    @kotlin.concurrent.Volatile private var nextEpisode: WatchProgress? = null
+
+    /** Ignore player progress until the new file has started (the old one's state may still be around). */
+    @kotlin.concurrent.Volatile private var awaitingStart = false
+    private var lastSavedAt = 0L
+
+    init {
+        trackProgress()
     }
 
     /** On-demand files are seekable already, so they play directly without the rewind recorder. */
-    private fun playVod(url: String, playback: VodPlayback) {
+    private fun startVod(url: String, playback: VodPlayback, entry: WatchProgress, next: WatchProgress?, fromStart: Boolean = false) {
+        saveProgressNow()
         currentChannel.value = null
         currentVod.value = playback
         val s = _settings.value
-        player.play(url, s.networkCachingMs, s.userAgent, rewindBufferMs = 0)
+        val resumeAt = if (fromStart) 0L else history.resumeAt(entry.key) ?: 0L
+        player.play(url, s.networkCachingMs, s.userAgent, rewindBufferMs = 0, startMs = resumeAt)
+        awaitingStart = true
+        playingEntry = entry
+        nextEpisode = next
         library.close()
     }
 
+    private fun trackProgress() = scope.launch {
+        while (true) {
+            delay(1_000)
+            val entry = playingEntry ?: continue
+            val state = player.state.value
+            val media = state.media ?: continue
+            if (awaitingStart) {
+                if (!state.playing) continue
+                awaitingStart = false
+            }
+            val updated = entry.copy(
+                positionMs = if (state.ended) media.durationMs else media.positionMs,
+                durationMs = media.durationMs,
+                updatedAt = nowMillis(),
+                nextUp = false,
+            )
+            playingEntry = updated
+            if (state.ended || updated.updatedAt - lastSavedAt >= PROGRESS_SAVE_MS) commit(updated)
+        }
+    }
+
+    private fun commit(entry: WatchProgress) {
+        lastSavedAt = nowMillis()
+        // A peek of a few seconds isn't worth a Continue watching card.
+        if (entry.fraction < WatchProgress.STARTED_AT && history[entry.key] == null) return
+        history.record(entry)
+        if (entry.finished) {
+            nextEpisode?.let { next ->
+                val started = history[next.key]?.let { it.fraction >= WatchProgress.STARTED_AT } == true
+                if (!started) history.record(next.copy(updatedAt = nowMillis() + 1, nextUp = true))
+            }
+            nextEpisode = null
+        }
+    }
+
+    /** Saves the playing title's position right away (before switching to something else, or on exit). */
+    private fun saveProgressNow() {
+        if (!awaitingStart) playingEntry?.let(::commit)
+        playingEntry = null
+        nextEpisode = null
+    }
+
     fun play(channel: Channel) {
+        saveProgressNow()
         currentVod.value = null
         currentChannel.value = channel
         // A channel picked from a search outside the current group makes its own group the one Left/Right steps through.
@@ -386,7 +532,13 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     val dataDirectory: String get() = repo.dataDirectory
 
     fun shutdown() {
+        saveProgressNow()
         player.release()
         scope.cancel()
+    }
+
+    private companion object {
+        /** How often the playing title's position is written to disk. */
+        const val PROGRESS_SAVE_MS = 10_000L
     }
 }

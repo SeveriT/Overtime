@@ -1,6 +1,9 @@
 package fi.severi.overtime.model
 
+import kotlinx.serialization.Serializable
+
 /** On-demand content from an Xtream Codes provider. */
+@Serializable
 enum class LibraryKind(val label: String) {
     MOVIES("Movies"),
     SERIES("Series"),
@@ -23,6 +26,11 @@ data class LibraryItem(
     val extension: String?,
     /** When the provider added it, epoch seconds; 0 if unknown. */
     val added: Long = 0,
+    /** IDs for rated poster artwork, when the provider includes them. */
+    val tmdbId: String? = null,
+    val imdbId: String? = null,
+    /** Wide artwork some panels list for series. */
+    val backdrop: String? = null,
 )
 
 data class MovieDetails(
@@ -33,6 +41,8 @@ data class MovieDetails(
     val releaseDate: String?,
     val duration: String?,
     val backdrop: String?,
+    val tmdbId: String? = null,
+    val imdbId: String? = null,
 )
 
 data class Episode(
@@ -54,7 +64,47 @@ data class SeriesDetails(
     val releaseDate: String?,
     val backdrop: String?,
     val seasons: List<Season>,
+    val tmdbId: String? = null,
+    val imdbId: String? = null,
 )
 
 /** What the player shows for an on-demand title. */
 data class VodPlayback(val title: String, val subtitle: String?, val poster: String?)
+
+/**
+ * Where the user is in a movie or episode, saved so it can resume and appear under Continue watching.
+ * Carries enough to draw the card and start playback without asking the provider again.
+ */
+@Serializable
+data class WatchProgress(
+    /** "m:<source>:<movie id>" or "e:<source>:<episode id>". */
+    val key: String,
+    val sourceId: String,
+    val kind: LibraryKind,
+    /** Movie id, or the series id for episodes. */
+    val itemId: String,
+    val title: String,
+    val extension: String,
+    val positionMs: Long,
+    val durationMs: Long,
+    val updatedAt: Long,
+    val episodeId: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val episodeTitle: String? = null,
+    val poster: String? = null,
+    val backdrop: String? = null,
+    val tmdbId: String? = null,
+    val imdbId: String? = null,
+    /** Queued automatically after the previous episode finished; not started yet. */
+    val nextUp: Boolean = false,
+) {
+    val fraction: Float get() = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    val finished: Boolean get() = durationMs > 0 && fraction >= FINISHED_AT
+
+    companion object {
+        /** Below this nothing is saved as "started"; above FINISHED_AT it counts as watched. */
+        const val STARTED_AT = 0.02f
+        const val FINISHED_AT = 0.95f
+    }
+}

@@ -1,6 +1,21 @@
 package fi.severi.overtime.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import fi.severi.overtime.data.PosterArt
+import fi.severi.overtime.model.DEFAULT_POSTER_TEMPLATE
+import fi.severi.overtime.model.LibraryKind
+import fi.severi.overtime.model.PosterCorners
+import fi.severi.overtime.model.PosterWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -102,6 +117,56 @@ private fun SectionHeader(text: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 8.dp),
     )
+}
+
+/** Single-choice filter chips in a scrollable row (for option lists too long for a connected group). */
+@Composable
+private fun <T> ChipChoice(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { option ->
+            FilterChip(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                label = { Text(label(option)) },
+                leadingIcon = if (option == selected) {
+                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                } else {
+                    null
+                },
+            )
+        }
+    }
+}
+
+/** Sample card (Inception's artwork) drawn with the chosen size, corners and orientation. */
+@Composable
+private fun PosterPreview(
+    width: PosterWidth,
+    corners: PosterCorners,
+    landscape: Boolean,
+    hideLabels: Boolean,
+    rated: Boolean,
+    template: String,
+) {
+    val cardWidth = if (landscape) (width.dp * 1.8f).dp else width.dp.dp
+    val image = if (rated) PosterArt.url(template, LibraryKind.MOVIES, "27205", "tt1375666", landscape) else null
+    Column(Modifier.width(cardWidth), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(if (landscape) 16f / 9f else 2f / 3f)
+                .clip(RoundedCornerShape(corners.dp.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        ) {
+            if (image != null) {
+                AsyncImage(model = image, contentDescription = "Preview", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
+        }
+        if (!hideLabels) {
+            Column {
+                Text("Inception", style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                Text("2010", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
 }
 
 /** Two-line list item with a trailing switch; the whole row toggles. */
@@ -320,6 +385,12 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     // Colours preview live; closing without saving puts the originals back.
     val originalSidebar = remember { settings.sidebarColor }
     val originalAccent = remember { settings.accentColor }
+    var posterWidth by remember { mutableStateOf(settings.posterWidth) }
+    var posterCorners by remember { mutableStateOf(settings.posterCorners) }
+    var landscapePosters by remember { mutableStateOf(settings.landscapePosters) }
+    var hidePosterLabels by remember { mutableStateOf(settings.hidePosterLabels) }
+    var ratedPosters by remember { mutableStateOf(settings.ratedPosters) }
+    var posterTemplate by remember { mutableStateOf(settings.posterTemplate) }
     val cancel = {
         vm.updateSettings { it.copy(sidebarColor = originalSidebar, accentColor = originalAccent) }
         onDismiss()
@@ -339,6 +410,12 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                             networkCachingMs = caching.toIntOrNull()?.coerceIn(0, 60_000) ?: it.networkCachingMs,
                             groupSort = groupSort,
                             rewindEnabled = rewindEnabled,
+                            posterWidth = posterWidth,
+                            posterCorners = posterCorners,
+                            landscapePosters = landscapePosters,
+                            hidePosterLabels = hidePosterLabels,
+                            ratedPosters = ratedPosters,
+                            posterTemplate = posterTemplate.trim().ifEmpty { DEFAULT_POSTER_TEMPLATE },
                         )
                     }
                     onDismiss()
@@ -390,6 +467,56 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
             label = { it.label },
             onSelect = { groupSort = it },
         )
+
+        SectionHeader("Poster cards")
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+            PosterPreview(posterWidth, posterCorners, landscapePosters, hidePosterLabels, ratedPosters, posterTemplate)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Live preview", style = MaterialTheme.typography.labelLarge)
+                val width = if (landscapePosters) (posterWidth.dp * 1.8f).toInt() else posterWidth.dp
+                val height = if (landscapePosters) width * 9 / 16 else posterWidth.dp * 3 / 2
+                Text("Width: $width dp", style = MaterialTheme.typography.bodyMedium)
+                Text("Height: $height dp", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Corner radius: ${posterCorners.dp} dp", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        FieldLabel("Width")
+        ChipChoice(PosterWidth.entries, posterWidth, { it.label }) { posterWidth = it }
+        FieldLabel("Corner radius")
+        ChipChoice(PosterCorners.entries, posterCorners, { it.label }) { posterCorners = it }
+        SwitchRow(
+            title = "Landscape posters",
+            supporting = "Wide 16:9 cards instead of tall posters.",
+            checked = landscapePosters,
+            onCheckedChange = { landscapePosters = it },
+        )
+        SwitchRow(
+            title = "Hide labels",
+            supporting = "Show artwork only, without the title and year under each card.",
+            checked = hidePosterLabels,
+            onCheckedChange = { hidePosterLabels = it },
+        )
+        SwitchRow(
+            title = "Rated poster artwork",
+            supporting = "Artwork with ratings and badges from the template below, for titles the provider gives a TMDB or IMDb ID.",
+            checked = ratedPosters,
+            onCheckedChange = { ratedPosters = it },
+        )
+        if (ratedPosters) {
+            OutlinedTextField(
+                value = posterTemplate,
+                onValueChange = { posterTemplate = it },
+                label = { Text("Artwork URL template") },
+                supportingText = { Text("Placeholders: {tmdb_id} {imdb_id} {id} {type} {shape}; add ? to make an ID optional.") },
+                maxLines = 4,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (posterTemplate.trim() != DEFAULT_POSTER_TEMPLATE) {
+                TextButton(onClick = { posterTemplate = DEFAULT_POSTER_TEMPLATE }, shapes = ButtonDefaults.shapes()) {
+                    Text("Reset template")
+                }
+            }
+        }
 
         SectionHeader("Playback")
         SwitchRow(

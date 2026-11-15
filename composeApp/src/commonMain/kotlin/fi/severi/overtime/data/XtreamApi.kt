@@ -76,6 +76,8 @@ class XtreamApi(private val client: HttpClient, private val json: Json) {
             releaseDate = info.firstOf("releasedate", "release_date"),
             duration = info.firstOf("duration")?.let(::tidyDuration),
             backdrop = info.firstImage("backdrop_path") ?: info.firstOf("movie_image", "cover_big"),
+            tmdbId = info.firstOf("tmdb_id", "tmdb") ?: root.obj("movie_data")?.firstOf("tmdb_id", "tmdb"),
+            imdbId = info.firstOf("imdb_id", "imdb"),
         )
     }
 
@@ -91,6 +93,8 @@ class XtreamApi(private val client: HttpClient, private val json: Json) {
             cast = info.firstOf("cast"),
             releaseDate = info.firstOf("releaseDate", "release_date", "releasedate"),
             backdrop = info.firstImage("backdrop_path") ?: info.firstOf("cover"),
+            tmdbId = info.firstOf("tmdb_id", "tmdb"),
+            imdbId = info.firstOf("imdb_id", "imdb"),
             seasons = parseEpisodes(root["episodes"])
                 .groupBy { it.first }
                 .toSortedMap()
@@ -126,6 +130,9 @@ class XtreamApi(private val client: HttpClient, private val json: Json) {
             categoryId = obj.str("category_id"),
             extension = obj.firstOf("container_extension"),
             added = obj.str("added").toLongOrNull() ?: obj.str("last_modified").toLongOrNull() ?: 0L,
+            tmdbId = obj.firstOf("tmdb_id", "tmdb"),
+            imdbId = obj.firstOf("imdb_id", "imdb"),
+            backdrop = obj.firstImage("backdrop_path"),
         )
     }
 
