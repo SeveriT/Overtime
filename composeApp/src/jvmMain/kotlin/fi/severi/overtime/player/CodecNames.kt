@@ -34,6 +34,17 @@ internal fun describeAudioCodec(fourcc: String?, description: String?): String? 
     else -> description?.takeIf { it.isNotBlank() } ?: fourcc
 }
 
+private val vlcTrackName = Regex("""^Track (\d+)(?: - \[(.+)])?$""")
+
+/** VLC's "Disable" / "Track 2 - [English]" → "Off" / "English (track 2)"; other names pass through. */
+internal fun tidyTrackName(id: Int, description: String?): String {
+    val text = description?.trim().orEmpty()
+    if (id < 0 || text.equals("Disable", ignoreCase = true)) return "Off"
+    val match = vlcTrackName.matchEntire(text) ?: return text.ifEmpty { "Track $id" }
+    val (number, language) = match.destructured
+    return if (language.isNotBlank()) "$language (track $number)" else "Track $number"
+}
+
 private val h264Profiles = mapOf(
     66 to "Baseline",
     77 to "Main",

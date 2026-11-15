@@ -44,6 +44,16 @@ data class StreamStats(
     val bufferBytes: Long?,
 )
 
+/** An audio or subtitle track; id -1 means "off". */
+data class MediaTrack(val id: Int, val name: String)
+
+data class TrackInfo(
+    val audio: List<MediaTrack>,
+    val audioSelected: Int,
+    val subtitles: List<MediaTrack>,
+    val subtitleSelected: Int,
+)
+
 /** Position within an on-demand file (movie, episode). */
 data class MediaProgress(val positionMs: Long, val durationMs: Long)
 
@@ -90,6 +100,14 @@ interface VideoPlayer {
 
     /** Current stream details for the info panel; null when nothing is playing. */
     fun streamStats(): StreamStats? = null
+
+    /** Audio and subtitle tracks of what's playing; null when nothing is. */
+    fun tracks(): TrackInfo? = null
+
+    fun selectAudioTrack(id: Int) = Unit
+
+    /** -1 turns subtitles off. */
+    fun selectSubtitleTrack(id: Int) = Unit
 }
 
 /** Draws the player's current video frame, letterboxed inside the given bounds. */

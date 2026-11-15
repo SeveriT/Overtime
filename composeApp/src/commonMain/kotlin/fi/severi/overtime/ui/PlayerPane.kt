@@ -37,7 +37,14 @@ import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Subtitles
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import fi.severi.overtime.player.MediaTrack
+import fi.severi.overtime.player.TrackInfo
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.outlined.ViewTimeline
 import androidx.compose.material3.AssistChip
@@ -443,6 +450,7 @@ private fun ToolbarButtons(
             }
             VolumeSlider(volume, muted, onVolumeChange = vm::setVolume, modifier = Modifier.width(150.dp))
 
+            TracksButton(vm)
             val statsVisible by vm.statsVisible.collectAsState()
             WithTooltip(if (statsVisible) "Hide stream info (I)" else "Stream info (I)") {
                 FilledTonalIconToggleButton(
@@ -458,6 +466,60 @@ private fun ToolbarButtons(
                 if (fullscreen) "Exit fullscreen (F)" else "Fullscreen (F)",
             ) { vm.toggleFullscreen() }
         }
+}
+
+/** Audio and subtitle track menu. Tracks are read when it opens, since streams announce them late. */
+@Composable
+private fun TracksButton(vm: AppViewModel) {
+    var open by remember { mutableStateOf(false) }
+    var info by remember { mutableStateOf<TrackInfo?>(null) }
+    Box {
+        ToolbarButton(Icons.Outlined.Subtitles, "Audio & subtitles (B / V)") {
+            info = vm.player.tracks()
+            open = true
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = MaterialTheme.shapes.large) {
+            val tracks = info
+            TrackSection("Audio", tracks?.audio.orEmpty().filter { it.id >= 0 }, tracks?.audioSelected) {
+                vm.player.selectAudioTrack(it)
+                open = false
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 4.dp))
+            // Always offer Off, even if the stream lists no subtitles yet.
+            val subtitles = tracks?.subtitles.orEmpty().let { list -> if (list.any { it.id < 0 }) list else listOf(MediaTrack(-1, "Off")) + list }
+            TrackSection("Subtitles", subtitles, tracks?.subtitleSelected ?: -1) {
+                vm.player.selectSubtitleTrack(it)
+                open = false
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackSection(title: String, tracks: List<MediaTrack>, selected: Int?, onPick: (Int) -> Unit) {
+    Text(
+        title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+    if (tracks.isEmpty()) {
+        Text(
+            "None in this stream",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
+    tracks.forEach { track ->
+        DropdownMenuItem(
+            text = { Text(track.name) },
+            onClick = { onPick(track.id) },
+            leadingIcon = {
+                if (track.id == selected) Icon(Icons.Default.Check, contentDescription = "Selected") else Spacer(Modifier.size(24.dp))
+            },
+        )
+    }
 }
 
 @Composable

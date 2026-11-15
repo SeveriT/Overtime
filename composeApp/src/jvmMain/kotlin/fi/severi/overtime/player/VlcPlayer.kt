@@ -419,6 +419,26 @@ class VlcPlayer : VideoPlayer {
         _state.update { it.copy(muted = !it.muted) }
     }
 
+    // ---- audio & subtitle tracks ---------------------------------------------------------
+
+    override fun tracks(): TrackInfo? {
+        if (!player.status().isPlayable && !_state.value.playing && !_state.value.paused) return null
+        return TrackInfo(
+            audio = player.audio().trackDescriptions().map { MediaTrack(it.id(), tidyTrackName(it.id(), it.description())) },
+            audioSelected = player.audio().track(),
+            subtitles = player.subpictures().trackDescriptions().map { MediaTrack(it.id(), tidyTrackName(it.id(), it.description())) },
+            subtitleSelected = player.subpictures().track(),
+        )
+    }
+
+    override fun selectAudioTrack(id: Int) {
+        player.audio().setTrack(id)
+    }
+
+    override fun selectSubtitleTrack(id: Int) {
+        player.subpictures().setTrack(id)
+    }
+
     override fun release() {
         synchronized(sessionLock) { endSession() }
         scope.cancel()

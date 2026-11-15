@@ -14,6 +14,15 @@ class CodecNamesTest {
     }
 
     @Test
+    fun tidiesTrackNames() {
+        assertEquals("Off", tidyTrackName(-1, "Disable"))
+        assertEquals("English (track 2)", tidyTrackName(2, "Track 2 - [English]"))
+        assertEquals("Track 3", tidyTrackName(3, "Track 3"))
+        assertEquals("Finnish closed captions", tidyTrackName(5, "Finnish closed captions"))
+        assertEquals("Track 7", tidyTrackName(7, ""))
+    }
+
+    @Test
     fun namesAudioCodecs() {
         assertEquals("AAC", describeAudioCodec("mp4a", "MPEG AAC Audio"))
         assertEquals("Dolby Digital (AC-3)", describeAudioCodec("a52 ", null))

@@ -205,6 +205,21 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         library.open()
     }
 
+    /** Steps to the next audio track (B, like VLC). */
+    fun cycleAudioTrack() = cycleTrack(subtitles = false)
+
+    /** Steps through subtitles, including off (V, like VLC). */
+    fun cycleSubtitles() = cycleTrack(subtitles = true)
+
+    private fun cycleTrack(subtitles: Boolean) {
+        val info = player.tracks() ?: return
+        val list = if (subtitles) info.subtitles else info.audio.filter { it.id >= 0 }
+        if (list.isEmpty()) return
+        val current = list.indexOfFirst { it.id == if (subtitles) info.subtitleSelected else info.audioSelected }
+        val next = list[(current + 1) % list.size]
+        if (subtitles) player.selectSubtitleTrack(next.id) else player.selectAudioTrack(next.id)
+    }
+
     /** Stops whatever is playing; the next launch won't auto-resume a stopped channel. */
     fun stopPlayback() {
         saveProgressNow()
