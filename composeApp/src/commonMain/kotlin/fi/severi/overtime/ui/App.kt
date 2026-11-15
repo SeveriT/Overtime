@@ -31,7 +31,7 @@ private const val SIDEBAR_MIN_DP = 280f
 private const val SIDEBAR_MAX_DP = 720f
 
 /** Below this window width the sidebar hides automatically. */
-private val NARROW_WINDOW = 1000.dp
+private val NARROW_WINDOW = 1200.dp
 private const val SIDEBAR_MAX_SHARE = 0.6f
 private val DEFAULT_SIDEBAR_DP = AppSettings().sidebarWidth.toFloat()
 private const val IMAGE_CACHE_BYTES = 300L * 1024 * 1024
