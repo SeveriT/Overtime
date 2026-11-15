@@ -18,11 +18,21 @@ $running = Get-Process -Name 'Overtime' -ErrorAction SilentlyContinue |
 if ($running) {
     Write-Host 'Closing the running copy of Overtime...'
     $running | Stop-Process -Force
-    Start-Sleep -Milliseconds 500
+    # Its files stay locked until the process has fully exited (VLC can take a moment to shut down).
+    $running | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
 }
 
 Write-Host "Installing to $installDir"
-if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
+if (Test-Path $installDir) {
+    # Retry briefly in case a file is still locked right after the app closed.
+    for ($attempt = 1; ; $attempt++) {
+        try { Remove-Item $installDir -Recurse -Force -ErrorAction Stop; break }
+        catch {
+            if ($attempt -ge 10) { throw }
+            Start-Sleep -Milliseconds 500
+        }
+    }
+}
 New-Item -ItemType Directory -Path (Split-Path $installDir) -Force | Out-Null
 Copy-Item $appImage $installDir -Recurse
 
