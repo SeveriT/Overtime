@@ -10,6 +10,7 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 - Channels and guides refresh in the background when the app opens (can be turned off)
 - Resumes the last channel on start
 - **Live rewind**: pause and rewind up to 5 minutes, with a seek bar and a Go live button
+- Channels, rewinds and Go live start on a keyframe, so the picture appears together with the sound
 
 ### Programme guide
 - XMLTV guides (plain or gzip), several per source; M3U header guides (`x-tvg-url`, `url-tvg`) are picked up automatically
@@ -20,7 +21,8 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 - Home rows per category, poster grid and search
 - Continue watching, resume where you left off, and Next up for series
 - Optional rated poster artwork from a configurable template, plus poster card size and corner settings
-- Now playing sidebar with episode list, and a mini player while browsing
+- Now playing sidebar with episode list (hidden when a title starts), and a mini player while browsing
+- Stop returns to Movies & series
 
 ### Player
 - GPU colour conversion, so 4K HEVC at 50 fps plays without dropped frames
@@ -32,7 +34,9 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 - Remembers the window size and position
 
 ### Look
-- Material 3 Expressive design with custom accent and sidebar / title bar colours
+- Material 3 Expressive design
+- Accent, sidebar / title bar and subtitle colours from presets or a full RGB picker (saturation/brightness, hue, hex)
+- Wide two-column Settings on desktop screens
 
 ## Requirements
 

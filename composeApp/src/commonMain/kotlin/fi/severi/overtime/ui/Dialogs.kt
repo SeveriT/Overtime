@@ -87,7 +87,7 @@ private fun DialogFrame(
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             // Keep a margin above and below so it reads as a dialog, not a page.
-            modifier = if (wide) Modifier.padding(vertical = 32.dp).fillMaxWidth(WIDE_DIALOG_FRACTION).widthIn(max = WIDE_DIALOG_MAX) else Modifier.width(600.dp),
+            modifier = if (wide) Modifier.padding(vertical = 72.dp).fillMaxWidth(WIDE_DIALOG_FRACTION).widthIn(max = WIDE_DIALOG_MAX) else Modifier.width(600.dp),
         ) {
             Column(Modifier.padding(top = 24.dp, bottom = 20.dp)) {
                 Text(
