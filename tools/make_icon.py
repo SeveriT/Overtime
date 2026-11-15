@@ -1,8 +1,8 @@
 """Generates the Overtime app icon: a master PNG, the window icon PNG and a multi-size Windows ICO.
 
-Design: the Material Symbols "live_tv" glyph (Outlined) in white on a rounded square in Overtime's blue,
-with the play triangle in coral red to echo the app's LIVE badge. Large sizes use the 48 px optical size;
-small sizes use the heavier 20 px one so the strokes stay crisp at 16-32 px.
+Design: the Material Symbols "live_tv" glyph (Outlined) in white, filling a rounded square in the app's
+default sidebar / title bar colour. Large sizes use the 48 px optical size; small sizes use the heavier
+20 px one so the strokes stay crisp at 16-32 px.
 
 Glyph sources (Apache 2.0, google/material-design-icons): tools/symbols/live_tv_{20,48}px.svg
 
@@ -18,9 +18,8 @@ ICON_DIR = ROOT / "composeApp" / "icons"
 RES_DIR = ROOT / "composeApp" / "src" / "jvmMain" / "resources"
 SYMBOLS = Path(__file__).resolve().parent / "symbols"
 
-BACKGROUND = (31, 79, 168)    # Overtime blue (#1F4FA8)
+BACKGROUND = (25, 28, 32)     # the app's default sidebar / title bar colour (#191C20)
 GLYPH = (255, 255, 255)
-PLAY = (255, 107, 94)         # coral red, like the LIVE badge
 
 ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
 SMALL_MAX = 32                # sizes up to this use the 20 px optical size
@@ -115,9 +114,6 @@ def load_symbol(px):
     return parse_path(re.search(r'\sd="([^"]+)"', svg).group(1))
 
 
-def _area(poly):
-    return sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(poly, poly[1:] + poly[:1])) / 2
-
 
 def _mask(polygons, size, scale, offset):
     """Even-odd fill: XOR of every polygon, which keeps the screen hollow and the triangle solid."""
@@ -142,17 +138,14 @@ def render(size):
     radius = round(s * 0.22)
     ImageDraw.Draw(img).rounded_rectangle([margin, margin, s - margin - 1, s - margin - 1], radius, fill=BACKGROUND)
 
-    polygons = load_symbol(20 if small else 48)
-    # The glyph's play triangle is the one subpath that sits wholly inside the screen; colour it separately.
-    triangle = min((p for p in polygons if abs(_area(p)) > 1), key=lambda p: abs(_area(p)))
-    body = [p for p in polygons if p is not triangle]
-
-    glyph_box = s * (0.80 if small else 0.66)  # small sizes get a bigger glyph
+    # Glyph box as a share of the icon. The symbol's own padding leaves the TV at ~83 % of the box, so
+    # 0.99 makes it nearly full width; small sizes stop at 1.04, the most that still clears the corners.
+    glyph_box = s * (1.04 if small else 0.99)
     scale = glyph_box / 960
     offset = (s - glyph_box) / 2
 
-    img.paste(Image.new("RGBA", (s, s), GLYPH + (255,)), (0, 0), _mask(body, s, scale, offset))
-    img.paste(Image.new("RGBA", (s, s), PLAY + (255,)), (0, 0), _mask([triangle], s, scale, offset))
+    polygons = load_symbol(20 if small else 48)
+    img.paste(Image.new("RGBA", (s, s), GLYPH + (255,)), (0, 0), _mask(polygons, s, scale, offset))
     return img.resize((size, size), Image.LANCZOS)
 
 
