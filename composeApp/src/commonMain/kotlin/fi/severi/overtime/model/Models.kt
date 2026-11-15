@@ -124,6 +124,8 @@ data class AppSettings(
     val lastSourceId: String? = null,
     val lastChannelId: String? = null,
     val favorites: Set<String> = emptySet(),
+    /** Starred channel groups as "<source id>|<group name>"; listed first, in their usual order. */
+    val favoriteGroups: Set<String> = emptySet(),
     val volume: Int = 100,
     val subtitles: SubtitleStyle = SubtitleStyle(),
     val picture: PictureAdjust = PictureAdjust(),
@@ -213,7 +215,10 @@ const val DEFAULT_POSTER_TEMPLATE =
         "&nsfsr=0.050&nsyo=0.93&rb=imdb,metacritic,popcorn,tomatoes&mw=lb:.99,tk:.01&tw=tk:.8,rt:.2&fbs=photoreal" +
         "&sws=1&sbsw=1.40&sbsh=1.20&sbpo=right&bdm=7&bms=5"
 
-data class GroupEntry(val name: String, val count: Int)
+data class GroupEntry(val name: String, val count: Int, val favorite: Boolean = false)
+
+/** Key of a group in [AppSettings.favoriteGroups]. */
+fun favoriteGroupKey(sourceId: String, group: String) = "$sourceId|$group"
 
 const val GROUP_ALL = "All channels"
 const val GROUP_FAVORITES = "Favorites"

@@ -18,6 +18,7 @@ import fi.severi.overtime.model.VodPlayback
 import fi.severi.overtime.model.GROUP_ALL
 import fi.severi.overtime.model.GROUP_FAVORITES
 import fi.severi.overtime.model.GroupEntry
+import fi.severi.overtime.model.favoriteGroupKey
 import fi.severi.overtime.model.GroupSort
 import fi.severi.overtime.model.Programme
 import fi.severi.overtime.model.Source
@@ -116,7 +117,10 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         channels[sourceId].orEmpty()
     }.stateIn(scope, SharingStarted.Eagerly, _channels.value[selectedSourceId.value].orEmpty())
 
-    /** All channels and Favorites first, then the source's own groups in the chosen order, each with its channel count. */
+    /**
+     * All channels and Favorites first, then the source's own groups in the chosen order, starred groups
+     * ahead of the rest (each keeping that order), each with its channel count.
+     */
     val groups: StateFlow<List<GroupEntry>> = combine(sourceChannels, _settings) { channels, settings ->
         buildGroups(channels, settings)
     }.stateIn(scope, SharingStarted.Eagerly, buildGroups(sourceChannels.value, _settings.value))
@@ -130,8 +134,11 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
             GroupSort.ALPHABETICAL -> own.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
             GroupSort.SIZE -> own.sortedWith(compareByDescending<GroupEntry> { it.count }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
         }
+        val sourceId = channels.firstOrNull()?.sourceId
+        val (starred, rest) = sorted.partition { sourceId != null && favoriteGroupKey(sourceId, it.name) in settings.favoriteGroups }
         val favorites = channels.count { it.id in settings.favorites }
-        return listOf(GroupEntry(GROUP_ALL, channels.size), GroupEntry(GROUP_FAVORITES, favorites)) + sorted
+        return listOf(GroupEntry(GROUP_ALL, channels.size), GroupEntry(GROUP_FAVORITES, favorites)) +
+            starred.map { it.copy(favorite = true) } + rest
     }
 
     fun openGroup(name: String) {
@@ -553,6 +560,12 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     }
 
     fun adjustVolume(delta: Int) = setVolume(_settings.value.volume + delta)
+
+    fun toggleFavoriteGroup(group: String) {
+        val sourceId = selectedSourceId.value ?: return
+        val key = favoriteGroupKey(sourceId, group)
+        updateSettings { it.copy(favoriteGroups = if (key in it.favoriteGroups) it.favoriteGroups - key else it.favoriteGroups + key) }
+    }
 
     fun toggleFavorite(channel: Channel) = updateSettings {
         it.copy(favorites = if (channel.id in it.favorites) it.favorites - channel.id else it.favorites + channel.id)

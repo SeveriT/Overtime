@@ -204,6 +204,7 @@ fun ChannelSidebar(
                 playingGroup = current?.takeIf { it.sourceId == selectedSourceId }?.group,
                 state = groupListState,
                 onOpen = vm::openGroup,
+                onToggleFavorite = vm::toggleFavoriteGroup,
             )
             channels.isEmpty() -> EmptyMessage(
                 when {
@@ -256,6 +257,7 @@ private fun ColumnScope.GroupList(
     playingGroup: String?,
     state: LazyListState,
     onOpen: (String) -> Unit,
+    onToggleFavorite: (String) -> Unit,
 ) {
     LazyColumn(Modifier.weight(1f), state = state, contentPadding = PaddingValues(bottom = 8.dp)) {
         items(groups, key = { it.name }) { group ->
@@ -272,7 +274,26 @@ private fun ColumnScope.GroupList(
                         else -> Icon(Icons.Outlined.LiveTv, contentDescription = null)
                     }
                 },
-                badge = { Text(group.count.toString(), style = MaterialTheme.typography.labelLarge) },
+                badge = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(group.count.toString(), style = MaterialTheme.typography.labelLarge)
+                        // The source's own groups can be starred to sit at the top of the list.
+                        if (group.name != GROUP_ALL && group.name != GROUP_FAVORITES) {
+                            IconToggleButton(
+                                checked = group.favorite,
+                                onCheckedChange = { onToggleFavorite(group.name) },
+                                shapes = IconButtonDefaults.toggleableShapes(),
+                                colors = IconButtonDefaults.iconToggleButtonColors(checkedContentColor = FavoriteGold),
+                            ) {
+                                Icon(
+                                    if (group.favorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = if (group.favorite) "Unstar group" else "Star group",
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                },
                 colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
                 modifier = Modifier.padding(ItemPadding),
             )
