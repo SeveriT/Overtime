@@ -273,16 +273,23 @@ class VlcPlayer : VideoPlayer {
         publish(rec)
     }
 
+    // What the rewind bar shows, kept smooth across the recorder's steps. Reset per channel.
+    @Volatile private var shownLive = 0L
+    @Volatile private var shownSpan = 0L
+
     private fun publish(rec: TimeshiftRecorder) {
         val start = rec.earliestWall
-        val dataEdge = rec.liveWall
+        val dataEdge = max(start, rec.liveWall)
         // HLS data lands a whole segment at a time, so the recorded edge moves in steps. Show the live edge
-        // following the clock instead (never more than one segment past the data), so the bar doesn't jump.
+        // following the clock instead (never more than one segment past the data, never backwards).
         val now = System.currentTimeMillis()
-        val live = now.coerceIn(max(start, dataEdge), max(start, dataEdge) + rec.edgeStepMs)
-        val position = (mediaStartWall + playedMs()).coerceIn(start, max(start, dataEdge))
+        val live = max(shownLive, now.coerceIn(dataEdge, dataEdge + rec.edgeStepMs))
+        shownLive = live
+        // A full buffer drops its oldest 10 s chunk at a time; a window that only grows slides smoothly instead.
+        shownSpan = max(shownSpan, live - start)
+        val position = (mediaStartWall + playedMs()).coerceIn(start, dataEdge)
         val tolerance = cushionMs + LIVE_SLACK_MS + rec.edgeStepMs
-        _state.update { it.copy(timeshift = TimeshiftState(start, live, position, liveToleranceMs = tolerance)) }
+        _state.update { it.copy(timeshift = TimeshiftState(live - shownSpan, live, position, liveToleranceMs = tolerance)) }
     }
 
     private fun endSession() {
@@ -376,6 +383,8 @@ class VlcPlayer : VideoPlayer {
         synchronized(sessionLock) {
             endSession()
             this.onDemand = onDemand
+            shownLive = 0L
+            shownSpan = 0L
             _state.update {
                 it.copy(playing = false, paused = false, buffering = 0f, error = null, timeshift = null, media = null, ended = false)
             }

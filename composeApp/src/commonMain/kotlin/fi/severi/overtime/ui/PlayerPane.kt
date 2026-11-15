@@ -545,9 +545,10 @@ private fun TimeshiftBar(
 ) {
     var dragValue by remember { mutableStateOf<Float?>(null) }
     val length = state.lengthMs.toFloat().coerceAtLeast(1f)
-    val value = (dragValue ?: (state.position - state.bufferStart).toFloat()).coerceIn(0f, length)
-    val behind = if (dragValue != null) (length - value).toLong() else state.behindMs
     val live = dragValue == null && state.isLive
+    // At live the gap to the edge wobbles by a segment as data arrives; keep the knob at the end instead.
+    val value = (dragValue ?: if (live) length else (state.position - state.bufferStart).toFloat()).coerceIn(0f, length)
+    val behind = if (dragValue != null) (length - value).toLong() else state.behindMs
 
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
