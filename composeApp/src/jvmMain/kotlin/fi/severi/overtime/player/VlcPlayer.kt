@@ -7,6 +7,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.skiaCanvas
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -62,8 +64,30 @@ class VlcPlayer : VideoPlayer {
     private var imageInfo: ImageInfo? = null
     private var pixels = ByteArray(0)
 
+    /** GPU path: I420 frames converted to RGB by a shader. Used whenever the shader compiles. */
+    internal val yuv = YuvRenderer()
+
+    @Volatile internal var usingYuv = false
+        private set
+
     private val bufferFormatCallback = object : BufferFormatCallbackAdapter() {
         override fun getBufferFormat(sourceWidth: Int, sourceHeight: Int): BufferFormat {
+            if (YuvRenderer.effect != null) {
+                // I420 is the decoder's own output, so VLC hands over its planes without RGB conversion.
+                // Even sizes keep the half-size chroma planes exact.
+                val width = sourceWidth and 1.inv()
+                val height = sourceHeight and 1.inv()
+                yuv.configure(width, height)
+                usingYuv = true
+                return BufferFormat(
+                    "I420",
+                    width,
+                    height,
+                    intArrayOf(width, width / 2, width / 2),
+                    intArrayOf(height, height / 2, height / 2),
+                )
+            }
+            usingYuv = false
             imageInfo = ImageInfo(sourceWidth, sourceHeight, ColorType.BGRA_8888, ColorAlphaType.OPAQUE)
             return RV32BufferFormat(sourceWidth, sourceHeight)
         }
@@ -78,8 +102,18 @@ class VlcPlayer : VideoPlayer {
             bufferFormat: BufferFormat,
             displayWidth: Int,
             displayHeight: Int,
-        ) = renderFrame(nativeBuffers[0], bufferFormat)
+        ) {
+            if (usingYuv) {
+                framesDrawn.incrementAndGet()
+                yuv.write(nativeBuffers)
+            } else {
+                renderFrame(nativeBuffers[0], bufferFormat)
+            }
+        }
     }
+
+    /** Frames handed to the screen so far (for tests and the fps readout). */
+    fun framesShown(): Long = framesDrawn.get()
 
     init {
         check(NativeDiscovery().discover()) { "VLC not found. Install 64-bit VLC 3.x from videolan.org." }
@@ -103,7 +137,10 @@ class VlcPlayer : VideoPlayer {
             override fun stopped(mediaPlayer: MediaPlayer) {
                 _state.update { it.copy(playing = false, paused = false, buffering = null) }
                 // While time-shifting, a seek restarts VLC; keep the last frame up instead of flashing black.
-                if (recorder == null) _frame.value = null
+                if (recorder == null) {
+                    _frame.value = null
+                    yuv.clear()
+                }
             }
 
             override fun buffering(mediaPlayer: MediaPlayer, newCache: Float) {
@@ -299,7 +336,7 @@ class VlcPlayer : VideoPlayer {
             endSession()
             _state.update { it.copy(playing = false, paused = false, buffering = 0f, error = null, timeshift = null) }
             if (rewindBufferMs <= 0) {
-                _frame.value = null
+                _frame.value = null; yuv.clear()
                 playDirect(url, networkCachingMs, userAgent)
                 return
             }
@@ -313,7 +350,7 @@ class VlcPlayer : VideoPlayer {
                 dir = File(timeshiftRoot, UUID.randomUUID().toString()),
             )
             recorder = rec
-            _frame.value = null
+            _frame.value = null; yuv.clear()
             rec.start()
             sessionJob = scope.launch { runSession(rec, url, networkCachingMs, userAgent) }
         }
@@ -344,6 +381,7 @@ class VlcPlayer : VideoPlayer {
         scope.cancel()
         player.release()
         factory.release()
+        yuv.release()
         timeshiftRoot.deleteRecursively()
     }
 
@@ -358,7 +396,18 @@ class VlcPlayer : VideoPlayer {
 actual fun VideoSurface(player: VideoPlayer, modifier: Modifier) {
     val vlc = player as? VlcPlayer ?: return
     val frame by vlc.frame.collectAsState()
+    val yuvVersion by vlc.yuv.version.collectAsState()
     Canvas(modifier) {
+        if (vlc.usingYuv) {
+            @Suppress("UNUSED_EXPRESSION") yuvVersion // read here so each new frame redraws
+            val renderer = vlc.yuv
+            if (renderer.width == 0 || !renderer.hasFrame) return@Canvas
+            val scale = min(size.width / renderer.width, size.height / renderer.height)
+            val left = (size.width - renderer.width * scale) / 2
+            val top = (size.height - renderer.height * scale) / 2
+            drawIntoCanvas { renderer.draw(it.skiaCanvas, left, top, scale) }
+            return@Canvas
+        }
         val image = frame ?: return@Canvas
         val scale = min(size.width / image.width, size.height / image.height)
         val dstWidth = (image.width * scale).roundToInt()

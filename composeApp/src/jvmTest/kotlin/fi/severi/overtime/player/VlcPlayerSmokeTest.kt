@@ -23,10 +23,8 @@ class VlcPlayerSmokeTest {
         val player = VlcPlayer()
         try {
             player.play("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", 1000, "Overtime-test")
-            val frame = runBlocking { withTimeoutOrNull(20_000) { player.frame.first { it != null } } }
-            assertNotNull(frame, "no video frame received within 20 s; state=${player.state.value}")
-            assertTrue(frame.width > 0 && frame.height > 0)
-            println("Frame ${frame.width}x${frame.height}, state=${player.state.value}")
+            assertTrue(waitForFrames(player, after = 0, timeoutMs = 20_000), "no video frame within 20 s; state=${player.state.value}")
+            println("NV12 path: ${player.usingYuv}, stats=${player.streamStats()}")
         } finally {
             player.release()
         }
@@ -60,8 +58,7 @@ class VlcPlayerSmokeTest {
         val player = VlcPlayer()
         try {
             player.play("http://127.0.0.1:${server.address.port}/live.m3u8", 1500, "Overtime-test", rewindBufferMs = 300_000)
-            val first = runBlocking { withTimeoutOrNull(30_000) { player.frame.first { it != null } } }
-            assertNotNull(first, "no frame from buffered playback; state=${player.state.value}")
+            assertTrue(waitForFrames(player, after = 0, timeoutMs = 30_000), "no frame from buffered playback; state=${player.state.value}")
             val live = runBlocking { withTimeoutOrNull(5_000) { player.state.first { it.timeshift != null } } }?.timeshift
             assertNotNull(live, "no timeshift state")
             println("Live: $live behind=${live.behindMs}")
@@ -98,9 +95,16 @@ class VlcPlayerSmokeTest {
     }
 
     private fun assertFrameAdvances(player: VlcPlayer, label: String) {
-        val before = player.frame.value
-        val next = runBlocking { withTimeoutOrNull(5_000) { player.frame.first { it != null && it !== before } } }
-        assertNotNull(next, "video stalled $label; state=${player.state.value}")
+        assertTrue(waitForFrames(player, after = player.framesShown(), timeoutMs = 5_000), "video stalled $label; state=${player.state.value}")
+    }
+
+    private fun waitForFrames(player: VlcPlayer, after: Long, timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (player.framesShown() > after) return true
+            Thread.sleep(50)
+        }
+        return false
     }
 
     /** First [count] TS segments of the lowest-bitrate variant of the public mux test stream. */
