@@ -85,13 +85,23 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     /** Sidebar shown over the video while fullscreen; not persisted, resets each time fullscreen is entered. */
     private val fullscreenSidebar = MutableStateFlow(false)
 
-    val sidebarVisible: StateFlow<Boolean> = combine(fullscreen, fullscreenSidebar, _settings) { full, overlay, settings ->
-        if (full) overlay else settings.sidebarVisible
+    /** Sidebar during a movie or episode: hidden when each one starts; live TV keeps its own setting. */
+    private val vodSidebar = MutableStateFlow(false)
+
+    val sidebarVisible: StateFlow<Boolean> = combine(fullscreen, fullscreenSidebar, _settings, currentVod, vodSidebar) { full, overlay, settings, vod, vodShown ->
+        when {
+            full -> overlay
+            vod != null -> vodShown
+            else -> settings.sidebarVisible
+        }
     }.stateIn(scope, SharingStarted.Eagerly, _settings.value.sidebarVisible)
 
     fun toggleSidebar() {
-        if (fullscreen.value) fullscreenSidebar.update { !it }
-        else updateSettings { it.copy(sidebarVisible = !it.sidebarVisible) }
+        when {
+            fullscreen.value -> fullscreenSidebar.update { !it }
+            currentVod.value != null -> vodSidebar.update { !it }
+            else -> updateSettings { it.copy(sidebarVisible = !it.sidebarVisible) }
+        }
     }
 
     fun setFullscreen(enabled: Boolean) {
@@ -247,6 +257,12 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     }
 
     /** Opens Movies & series. A live channel stops; a movie or episode keeps playing (shown as a mini player). */
+    /** Stop for a movie or episode: back to the library to pick something else. */
+    fun stopToLibrary() {
+        stopPlayback()
+        library.open()
+    }
+
     fun openLibrary() {
         closeGuide()
         if (currentChannel.value != null) stopPlayback()
@@ -400,6 +416,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         saveProgressNow()
         currentChannel.value = null
         currentVod.value = playback
+        vodSidebar.value = false
         val s = _settings.value
         val resumeAt = if (fromStart) 0L else history.resumeAt(entry.key) ?: 0L
         player.play(url, s.networkCachingMs, s.userAgent, rewindBufferMs = 0, startMs = resumeAt, onDemand = true)

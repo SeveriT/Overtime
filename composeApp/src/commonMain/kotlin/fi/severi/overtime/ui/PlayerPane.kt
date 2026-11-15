@@ -467,7 +467,9 @@ private fun ToolbarButtons(
                 ) { vm.seekBy(REWIND_STEP_MS) }
             }
             if (!onDemand) ToolbarButton(Icons.Default.SkipNext, "Next channel (→)") { vm.step(1) }
-            ToolbarButton(Icons.Default.Stop, "Stop") { vm.stopPlayback() }
+            ToolbarButton(Icons.Default.Stop, if (onDemand) "Stop and open Movies & series" else "Stop") {
+                if (onDemand) vm.stopToLibrary() else vm.stopPlayback()
+            }
 
             VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
