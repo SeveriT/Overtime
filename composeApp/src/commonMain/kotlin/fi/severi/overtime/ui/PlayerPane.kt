@@ -28,6 +28,8 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
+import fi.severi.overtime.player.AspectMode
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
@@ -165,7 +167,8 @@ fun PlayerPane(
                 )
             },
     ) {
-        VideoSurface(vm.player, Modifier.fillMaxSize())
+        val aspect by vm.aspect.collectAsState()
+        VideoSurface(vm.player, Modifier.fillMaxSize(), aspect)
 
         when {
             !hasContent -> CenterMessage("Pick a channel from the list")
@@ -221,7 +224,7 @@ fun PlayerPane(
                         Modifier
                             .fillMaxWidth()
                             .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent)))
-                            .padding(horizontal = 28.dp, vertical = 24.dp)
+                            .padding(start = 28.dp, end = 96.dp, top = 24.dp, bottom = 24.dp)
                             .align(Alignment.TopStart),
                     ) {
                         Text(
@@ -258,7 +261,7 @@ fun PlayerPane(
                         Modifier
                             .fillMaxWidth()
                             .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent)))
-                            .padding(horizontal = 28.dp, vertical = 24.dp)
+                            .padding(start = 28.dp, end = 96.dp, top = 24.dp, bottom = 24.dp)
                             .align(Alignment.TopStart),
                     ) {
                         Text(
@@ -270,6 +273,21 @@ fun PlayerPane(
                         )
                         playback.subtitle?.let {
                             Text(it, style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = 0.7f))
+                        }
+                    }
+                }
+
+                if (hasContent) {
+                    val statsVisible by vm.statsVisible.collectAsState()
+                    Box(Modifier.align(Alignment.TopEnd).padding(24.dp)) {
+                        WithTooltip(if (statsVisible) "Hide stream info (I)" else "Stream info (I)", above = false) {
+                            FilledTonalIconToggleButton(
+                                checked = statsVisible,
+                                onCheckedChange = { vm.toggleStats() },
+                                shapes = IconButtonDefaults.toggleableShapes(),
+                            ) {
+                                Icon(Icons.Outlined.Info, contentDescription = "Stream info")
+                            }
                         }
                     }
                 }
@@ -295,7 +313,8 @@ fun PlayerPane(
             visible = statsVisible && hasContent,
             enter = fadeIn() + scaleIn(initialScale = 0.95f),
             exit = fadeOut() + scaleOut(targetScale = 0.95f),
-            modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
+            // Below the info button, which sits in the top-right corner with the controls.
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 84.dp, end = 24.dp),
         ) {
             StreamInfoPanel(vm)
         }
@@ -453,21 +472,51 @@ private fun ToolbarButtons(
             VolumeSlider(volume, muted, onVolumeChange = vm::setVolume, modifier = Modifier.width(150.dp))
 
             TracksButton(vm)
-            val statsVisible by vm.statsVisible.collectAsState()
-            WithTooltip(if (statsVisible) "Hide stream info (I)" else "Stream info (I)") {
-                FilledTonalIconToggleButton(
-                    checked = statsVisible,
-                    onCheckedChange = { vm.toggleStats() },
-                    shapes = IconButtonDefaults.toggleableShapes(),
-                ) {
-                    Icon(Icons.Outlined.Info, contentDescription = "Stream info")
-                }
-            }
+            AspectButton(vm)
             ToolbarButton(
                 if (fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                 if (fullscreen) "Exit fullscreen (F)" else "Fullscreen (F)",
             ) { vm.toggleFullscreen() }
         }
+}
+
+/** Picture shape menu: Auto, fixed ratios, Stretch and Zoom. */
+@Composable
+private fun AspectButton(vm: AppViewModel) {
+    var open by remember { mutableStateOf(false) }
+    val aspect by vm.aspect.collectAsState()
+    Box {
+        WithTooltip("Aspect ratio: ${aspect.label} (A)") {
+            FilledTonalIconToggleButton(
+                // Highlighted while something other than Auto is forced.
+                checked = aspect != AspectMode.AUTO,
+                onCheckedChange = { open = true },
+                shapes = IconButtonDefaults.toggleableShapes(),
+            ) {
+                Icon(Icons.Default.AspectRatio, contentDescription = "Aspect ratio")
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = MaterialTheme.shapes.large) {
+            Text(
+                "Aspect ratio",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            AspectMode.entries.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode.label) },
+                    onClick = {
+                        vm.aspect.value = mode
+                        open = false
+                    },
+                    leadingIcon = {
+                        if (mode == aspect) Icon(Icons.Default.Check, contentDescription = "Selected") else Spacer(Modifier.size(24.dp))
+                    },
+                )
+            }
+        }
+    }
 }
 
 /** Audio and subtitle track menu. Tracks are read when it opens, since streams announce them late. */

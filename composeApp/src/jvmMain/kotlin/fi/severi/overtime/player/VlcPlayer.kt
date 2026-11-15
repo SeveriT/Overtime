@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -212,7 +213,16 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
     /** Seek position is only meaningful for movies and episodes; live HLS reports a sliding "length". */
     @Volatile private var onDemand = false
 
+    /** Sample aspect ratio of the playing video (1 for square pixels), read from the stream. */
+    @Volatile internal var pixelAspect = 1f
+
     private fun publishMediaProgress() {
+        if (player.status().isPlaying) {
+            pixelAspect = player.media().info()?.videoTracks()?.firstOrNull()
+                ?.takeIf { it.sampleAspectRatio() > 0 && it.sampleAspectRatioBase() > 0 }
+                ?.let { it.sampleAspectRatio().toFloat() / it.sampleAspectRatioBase() }
+                ?.coerceIn(0.5f, 2.5f) ?: 1f
+        }
         val length = if (recorder == null && onDemand) player.status().length() else 0L
         val progress = if (length > 0) MediaProgress(player.status().time().coerceIn(0, length), length) else null
         if (progress != _state.value.media) _state.update { it.copy(media = progress) }
@@ -412,6 +422,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
             endSession()
             this.onDemand = onDemand
             lastPlay = PlayRequest(url, networkCachingMs, userAgent)
+            pixelAspect = 1f
             pendingTracks = null
             shownLive = 0L
             shownSpan = 0L
@@ -540,29 +551,26 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
 }
 
 @Composable
-actual fun VideoSurface(player: VideoPlayer, modifier: Modifier) {
+actual fun VideoSurface(player: VideoPlayer, modifier: Modifier, aspect: AspectMode) {
     val vlc = player as? VlcPlayer ?: return
     val frame by vlc.frame.collectAsState()
     val yuvVersion by vlc.yuv.version.collectAsState()
-    Canvas(modifier) {
+    // Zoom draws past the edges; keep it inside the player area.
+    Canvas(modifier.clipToBounds()) {
         if (vlc.usingYuv) {
             @Suppress("UNUSED_EXPRESSION") yuvVersion // read here so each new frame redraws
             val renderer = vlc.yuv
             if (renderer.width == 0 || !renderer.hasFrame) return@Canvas
-            val scale = min(size.width / renderer.width, size.height / renderer.height)
-            val left = (size.width - renderer.width * scale) / 2
-            val top = (size.height - renderer.height * scale) / 2
-            drawIntoCanvas { renderer.draw(it.skiaCanvas, left, top, scale) }
+            val r = videoRect(size, renderer.width, renderer.height, vlc.pixelAspect, aspect)
+            drawIntoCanvas { renderer.draw(it.skiaCanvas, r.left, r.top, r.width / renderer.width, r.height / renderer.height) }
             return@Canvas
         }
         val image = frame ?: return@Canvas
-        val scale = min(size.width / image.width, size.height / image.height)
-        val dstWidth = (image.width * scale).roundToInt()
-        val dstHeight = (image.height * scale).roundToInt()
+        val r = videoRect(size, image.width, image.height, vlc.pixelAspect, aspect)
         drawImage(
             image = image,
-            dstOffset = IntOffset(((size.width - dstWidth) / 2).roundToInt(), ((size.height - dstHeight) / 2).roundToInt()),
-            dstSize = IntSize(dstWidth, dstHeight),
+            dstOffset = IntOffset(r.left.roundToInt(), r.top.roundToInt()),
+            dstSize = IntSize(r.width.roundToInt(), r.height.roundToInt()),
             filterQuality = FilterQuality.Medium,
         )
     }

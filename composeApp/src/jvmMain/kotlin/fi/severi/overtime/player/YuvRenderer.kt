@@ -92,7 +92,7 @@ internal class YuvRenderer {
     }
 
     /** Draws the newest frame at [left],[top] scaled by [scale]. */
-    fun draw(canvas: Canvas, left: Float, top: Float, scale: Float) {
+    fun draw(canvas: Canvas, left: Float, top: Float, scaleX: Float, scaleY: Float = scaleX) {
         val program = effect ?: return
         val index = synchronized(lock) {
             if (front < 0) return
@@ -120,7 +120,7 @@ internal class YuvRenderer {
             paint.shader = shader
             canvas.save()
             canvas.translate(left, top)
-            canvas.scale(scale, scale)
+            canvas.scale(scaleX, scaleY)
             canvas.drawRect(Rect.makeWH(width.toFloat(), height.toFloat()), paint)
             canvas.restore()
             shader.close()
