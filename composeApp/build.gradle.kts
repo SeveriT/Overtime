@@ -49,7 +49,9 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
-            modules("java.instrument", "java.management", "jdk.unsupported", "java.xml")
+            // jdk.accessibility isn't found by suggestRuntimeModules, but without it the app exits
+            // silently at startup since the material3 Expressive upgrade.
+            modules("java.instrument", "java.management", "jdk.unsupported", "java.xml", "jdk.accessibility")
             packageName = "Overtime"
             packageVersion = "0.1.0"
             description = "IPTV player"
