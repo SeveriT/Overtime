@@ -57,6 +57,15 @@ data class EpgData(
         return nameToId[name.removeSuffix(" hd").removeSuffix(" fhd").removeSuffix(" uhd").trim()]
     }
 
+    /** All programmes for a channel, sorted by start; empty if the guide doesn't know it. */
+    fun programmesFor(channel: Channel): List<Programme> = resolveId(channel)?.let(programmes::get).orEmpty()
+
+    /** Earliest start and latest stop across the whole guide, or null when empty. */
+    val span: Pair<Long, Long>? by lazy {
+        if (programmes.isEmpty()) null
+        else programmes.values.minOf { it.first().start } to programmes.values.maxOf { it.last().stop }
+    }
+
     /** Current and following programme on the channel at [now]. */
     fun nowNext(channel: Channel, now: Long): Pair<Programme?, Programme?> {
         val list = resolveId(channel)?.let(programmes::get) ?: return null to null

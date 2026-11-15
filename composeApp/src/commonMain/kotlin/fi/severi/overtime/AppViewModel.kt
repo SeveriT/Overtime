@@ -197,6 +197,45 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     fun goLive() = player.goLive()
 
+    // ---- programme guide ---------------------------------------------------------
+
+    val guideVisible = MutableStateFlow(false)
+
+    /** Group whose channels the guide lists; starts as the sidebar's group each time it opens. */
+    val guideGroup = MutableStateFlow(GROUP_ALL)
+
+    /** Hide channels the guide has no programmes for. */
+    val guideOnlyWithData = MutableStateFlow(true)
+
+    /** Wall-clock time at the guide's left edge. */
+    val guideStart = MutableStateFlow(0L)
+
+    fun openGuide() {
+        guideGroup.value = selectedGroup.value
+        guideStart.value = guideHome()
+        guideVisible.value = true
+    }
+
+    fun closeGuide() {
+        guideVisible.value = false
+    }
+
+    fun toggleGuide() = if (guideVisible.value) closeGuide() else openGuide()
+
+    fun shiftGuide(deltaMs: Long) = guideStart.update { it + deltaMs }
+
+    /** Back to "now": half an hour of the past in view so the current programmes show in full. */
+    fun guideToNow() {
+        guideStart.value = guideHome()
+    }
+
+    private fun guideHome(): Long {
+        val halfHour = 30 * 60_000L
+        return (nowMillis() - halfHour) / halfHour * halfHour
+    }
+
+    fun programmesFor(channel: Channel): List<Programme> = _epg.value[channel.sourceId]?.programmesFor(channel).orEmpty()
+
     /** Stream info panel (resolution, fps, codecs…), toggled with the toolbar button or I. */
     val statsVisible = MutableStateFlow(false)
 

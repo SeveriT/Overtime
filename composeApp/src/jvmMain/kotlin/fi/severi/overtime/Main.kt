@@ -37,6 +37,8 @@ import fi.severi.overtime.ui.sidebarColorOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.jetbrains.skia.Image
 
+private const val GUIDE_STEP_MS = 30 * 60_000L
+
 /** Window and taskbar icon; the exe and installer use composeApp/icons/overtime.ico. */
 private fun loadAppIcon(): Painter? = runCatching {
     val bytes = object {}.javaClass.getResourceAsStream("/overtime_icon.png")!!.use { it.readBytes() }
@@ -67,9 +69,21 @@ fun main() = application {
         icon = appIcon,
         onKeyEvent = { event ->
             if (event.type != KeyEventType.KeyDown || vm == null) return@Window false
+            // In the guide, left/right move through time (30 min, or 3 h with Shift) instead of changing channel.
+            if (vm.guideVisible.value) {
+                val step = if (event.isShiftPressed) 3 * GUIDE_STEP_MS else GUIDE_STEP_MS
+                when (event.key) {
+                    Key.DirectionLeft -> { vm.shiftGuide(-step); return@Window true }
+                    Key.DirectionRight -> { vm.shiftGuide(step); return@Window true }
+                    Key.MoveHome -> { vm.guideToNow(); return@Window true }
+                    else -> Unit
+                }
+            }
             when (event.key) {
                 Key.F, Key.F11 -> { vm.toggleFullscreen(); true }
+                Key.G -> { vm.toggleGuide(); true }
                 Key.Escape -> when {
+                    vm.guideVisible.value -> { vm.closeGuide(); true }
                     fullscreen -> { vm.setFullscreen(false); true }
                     !vm.showGroupList.value -> { vm.backToGroups(); true }
                     else -> false

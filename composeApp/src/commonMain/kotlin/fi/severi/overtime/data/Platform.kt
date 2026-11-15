@@ -24,3 +24,9 @@ expect fun nowMillis(): Long
 
 /** Formats an epoch-millis instant as local HH:mm. */
 expect fun formatClock(epochMillis: Long): String
+
+/** Local midnight at or before [epochMillis]. */
+expect fun startOfLocalDay(epochMillis: Long): Long
+
+/** Short local date such as "Sat 15 Nov". */
+expect fun formatDay(epochMillis: Long): String

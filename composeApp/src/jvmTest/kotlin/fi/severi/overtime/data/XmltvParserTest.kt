@@ -53,4 +53,15 @@ class XmltvParserTest {
         val unknown = Channel("c3", "s", "Nope", "g", "http://x")
         assertNull(epg.nowNext(unknown, duringNews).first)
     }
+
+    @Test
+    fun guideListsProgrammesAndSpan() {
+        val epg = parseXmltv(xml.encodeToByteArray())
+        val channel = Channel("c1", "s", "TV1", "g", "http://x")
+        assertEquals(listOf("News", "Sports"), epg.programmesFor(channel).map { it.title })
+        assertEquals(emptyList(), epg.programmesFor(Channel("c3", "s", "Nope", "g", "http://x")))
+        val (from, to) = epg.span!!
+        assertEquals(2 * 60 * 60 * 1000L, to - from)
+        assertNull(parseXmltv(ByteArray(0)).span)
+    }
 }

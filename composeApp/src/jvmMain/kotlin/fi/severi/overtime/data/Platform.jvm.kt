@@ -54,3 +54,13 @@ private val clockFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm"
 
 actual fun formatClock(epochMillis: Long): String =
     clockFormat.format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()))
+
+actual fun startOfLocalDay(epochMillis: Long): Long =
+    Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+        .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+// English to match the rest of the UI.
+private val dayFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.ENGLISH)
+
+actual fun formatDay(epochMillis: Long): String =
+    dayFormat.format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()))

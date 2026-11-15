@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.ViewTimeline
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.FilledIconButton
@@ -320,6 +321,7 @@ private fun ToolbarButtons(
                 if (sidebarVisible) Icons.AutoMirrored.Filled.MenuOpen else Icons.Default.Menu,
                 if (sidebarVisible) "Hide channel list (S)" else "Show channel list (S)",
             ) { vm.toggleSidebar() }
+            ToolbarButton(Icons.Outlined.ViewTimeline, "Programme guide (G)") { vm.openGuide() }
 
             VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
