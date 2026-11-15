@@ -45,6 +45,7 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
+            modules("java.instrument", "java.management", "jdk.unsupported", "java.xml")
             packageName = "Overtime"
             packageVersion = "0.1.0"
             description = "IPTV player"

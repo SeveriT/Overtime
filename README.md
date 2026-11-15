@@ -23,6 +23,15 @@ A lean IPTV player for Windows, built with Kotlin, Compose Multiplatform and lib
 .\gradlew :composeApp:packageMsi   # installer in composeApp\build\compose\binaries\main\msi
 ```
 
+### Install with a desktop shortcut
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Builds a standalone copy, installs it to `%LOCALAPPDATA%\Programs\Overtime` and creates
+an `Overtime` shortcut on the desktop. Run it again after pulling changes to update.
+
 ## Shortcuts
 
 | Key | Action |
