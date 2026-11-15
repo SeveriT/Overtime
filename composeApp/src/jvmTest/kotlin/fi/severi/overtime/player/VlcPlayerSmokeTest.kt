@@ -77,6 +77,10 @@ class VlcPlayerSmokeTest {
             assertFalse(rewound.isLive, "should be behind live after rewinding")
             assertTrue(rewound.behindMs >= 6_000, "behind only ${rewound.behindMs} ms")
             assertFrameAdvances(player, "after rewind")
+            // Regression: an unpaced input made VLC race to the live edge a few seconds after rewinding.
+            Thread.sleep(5_000)
+            val stillBehind = player.state.value.timeshift!!
+            assertFalse(stillBehind.isLive, "jumped back to live by itself, behind ${stillBehind.behindMs} ms")
 
             // And back.
             player.goLive()

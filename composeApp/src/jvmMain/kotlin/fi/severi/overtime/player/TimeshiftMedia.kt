@@ -4,14 +4,20 @@ import uk.co.caprica.vlcj.media.callback.DefaultCallbackMedia
 
 /**
  * Feeds libVLC from a [TimeshiftRecorder], starting at [startOffset] and following the recording.
- * Not seekable from VLC's side: seeking is done by starting a new instance at another offset, which
- * keeps VLC from probing the (unbounded) stream end.
+ *
+ * Must be *seekable*: VLC 3's callback input (modules/access/imem-access.c) only reports
+ * STREAM_CAN_PAUSE / STREAM_CAN_CONTROL_PACE when a seek callback exists. Without it VLC treats the
+ * input as an unpaced live source, reads everything up to the live edge as fast as it can and resyncs
+ * its clock there — a rewind would jump back to live after a few seconds, and pause would not hold.
+ *
+ * VLC sees positions relative to [startOffset]; the size stays unknown so it never probes the end.
+ * Large jumps are still done by starting a new instance (see VlcPlayer.seekTo).
  */
 class TimeshiftMedia(
     private val recorder: TimeshiftRecorder,
-    startOffset: Long,
+    private val startOffset: Long,
     private val onFellBehind: () -> Unit,
-) : DefaultCallbackMedia(false) {
+) : DefaultCallbackMedia(true) {
 
     @Volatile var offset: Long = startOffset
         private set
@@ -47,7 +53,13 @@ class TimeshiftMedia(
         return 0
     }
 
-    override fun onSeek(offset: Long): Boolean = false
+    /** VLC's small seeks (probing, resync) within what is buffered. */
+    override fun onSeek(offset: Long): Boolean {
+        val target = startOffset + offset
+        if (target < recorder.earliestOffset || target > recorder.latestOffset) return false
+        this.offset = target
+        return true
+    }
 
     override fun onClose() {
         cancelled = true
