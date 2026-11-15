@@ -25,7 +25,7 @@ class StartupTest {
     private class FakePlayer : VideoPlayer {
         val played = mutableListOf<String>()
         override val state: StateFlow<PlayerState> = MutableStateFlow(PlayerState())
-        override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long, startMs: Long) {
+        override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long, startMs: Long, onDemand: Boolean) {
             played += url
         }
         override fun stop() = Unit

@@ -377,7 +377,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         currentVod.value = playback
         val s = _settings.value
         val resumeAt = if (fromStart) 0L else history.resumeAt(entry.key) ?: 0L
-        player.play(url, s.networkCachingMs, s.userAgent, rewindBufferMs = 0, startMs = resumeAt)
+        player.play(url, s.networkCachingMs, s.userAgent, rewindBufferMs = 0, startMs = resumeAt, onDemand = true)
         awaitingStart = true
         playingEntry = entry
         nextEpisode = next

@@ -39,7 +39,7 @@ class ScreenshotTest {
     private class FakePlayer : VideoPlayer {
         val mutableState = MutableStateFlow(PlayerState(playing = true, volume = 70, timeshift = timeshift(behindMs = 2_000)))
         override val state: StateFlow<PlayerState> = mutableState
-        override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long, startMs: Long) = Unit
+        override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long, startMs: Long, onDemand: Boolean) = Unit
         override fun stop() = Unit
         override fun togglePause() = Unit
         override fun setVolume(volume: Int) = Unit

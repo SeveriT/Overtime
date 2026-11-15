@@ -182,8 +182,11 @@ class VlcPlayer : VideoPlayer {
         }
     }
 
+    /** Seek position is only meaningful for movies and episodes; live HLS reports a sliding "length". */
+    @Volatile private var onDemand = false
+
     private fun publishMediaProgress() {
-        val length = if (recorder == null) player.status().length() else 0L
+        val length = if (recorder == null && onDemand) player.status().length() else 0L
         val progress = if (length > 0) MediaProgress(player.status().time().coerceIn(0, length), length) else null
         if (progress != _state.value.media) _state.update { it.copy(media = progress) }
     }
@@ -272,9 +275,12 @@ class VlcPlayer : VideoPlayer {
 
     private fun publish(rec: TimeshiftRecorder) {
         val start = rec.earliestWall
-        val live = rec.liveWall
-        val position = (mediaStartWall + playedMs()).coerceIn(start, max(start, live))
-        // HLS's live edge jumps a segment at a time, so "live" must allow for one jump.
+        val dataEdge = rec.liveWall
+        // HLS data lands a whole segment at a time, so the recorded edge moves in steps. Show the live edge
+        // following the clock instead (never more than one segment past the data), so the bar doesn't jump.
+        val now = System.currentTimeMillis()
+        val live = now.coerceIn(max(start, dataEdge), max(start, dataEdge) + rec.edgeStepMs)
+        val position = (mediaStartWall + playedMs()).coerceIn(start, max(start, dataEdge))
         val tolerance = cushionMs + LIVE_SLACK_MS + rec.edgeStepMs
         _state.update { it.copy(timeshift = TimeshiftState(start, live, position, liveToleranceMs = tolerance)) }
     }
@@ -366,9 +372,10 @@ class VlcPlayer : VideoPlayer {
         _frame.value = Image.makeRaster(info, pixels, format.pitches[0]).toComposeImageBitmap()
     }
 
-    override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long, startMs: Long) {
+    override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long, startMs: Long, onDemand: Boolean) {
         synchronized(sessionLock) {
             endSession()
+            this.onDemand = onDemand
             _state.update {
                 it.copy(playing = false, paused = false, buffering = 0f, error = null, timeshift = null, media = null, ended = false)
             }

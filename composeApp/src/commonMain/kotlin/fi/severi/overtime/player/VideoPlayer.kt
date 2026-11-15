@@ -77,9 +77,17 @@ interface VideoPlayer {
 
     /**
      * Plays [url]; with [rewindBufferMs] > 0 the stream is recorded so it can be paused and rewound.
-     * [startMs] starts an on-demand file part-way through (resume).
+     * [startMs] starts an on-demand file part-way through (resume). Only [onDemand] media (movies, episodes)
+     * report a seek position; live streams don't, even when VLC gives them a "length".
      */
-    fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long = 0, startMs: Long = 0)
+    fun play(
+        url: String,
+        networkCachingMs: Int,
+        userAgent: String,
+        rewindBufferMs: Long = 0,
+        startMs: Long = 0,
+        onDemand: Boolean = false,
+    )
     fun stop()
     fun togglePause()
     fun setVolume(volume: Int)
