@@ -456,8 +456,8 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     /** Group whose channels the guide lists; starts as the sidebar's group each time it opens. */
     val guideGroup = MutableStateFlow(GROUP_ALL)
 
-    /** Hide channels the guide has no programmes for. */
-    val guideOnlyWithData = MutableStateFlow(true)
+    /** Hide channels the guide has no programmes for (off by default: show every channel). */
+    val guideOnlyWithData = MutableStateFlow(false)
 
     /** Wall-clock time at the guide's left edge. */
     val guideStart = MutableStateFlow(0L)
