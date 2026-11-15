@@ -79,6 +79,7 @@ data class AppSettings(
     val userAgent: String = "VLC/3.0.24 LibVLC/3.0.24",
     val networkCachingMs: Int = 1500,
     val groupSort: GroupSort = GroupSort.PLAYLIST,
+    val sidebarVisible: Boolean = true,
     val lastSourceId: String? = null,
     val lastChannelId: String? = null,
     val favorites: Set<String> = emptySet(),

@@ -18,9 +18,11 @@ import androidx.compose.ui.unit.dp
 import fi.severi.overtime.AppViewModel
 
 @Composable
-fun App(vm: AppViewModel, fullscreen: Boolean, onToggleFullscreen: () -> Unit) {
+fun App(vm: AppViewModel) {
     OvertimeTheme {
         val sources by vm.sources.collectAsState()
+        val fullscreen by vm.fullscreen.collectAsState()
+        val sidebarVisible by vm.sidebarVisible.collectAsState()
         var showSources by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 
@@ -29,7 +31,7 @@ fun App(vm: AppViewModel, fullscreen: Boolean, onToggleFullscreen: () -> Unit) {
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Row(Modifier.fillMaxSize()) {
-                if (!fullscreen) {
+                if (sidebarVisible) {
                     ChannelSidebar(
                         vm = vm,
                         onOpenSources = { showSources = true },
@@ -40,7 +42,7 @@ fun App(vm: AppViewModel, fullscreen: Boolean, onToggleFullscreen: () -> Unit) {
                 PlayerPane(
                     vm = vm,
                     fullscreen = fullscreen,
-                    onToggleFullscreen = onToggleFullscreen,
+                    sidebarVisible = sidebarVisible,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }

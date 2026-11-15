@@ -6,10 +6,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
@@ -26,13 +25,14 @@ import fi.severi.overtime.data.Repository
 import fi.severi.overtime.player.VlcPlayer
 import fi.severi.overtime.ui.App
 import fi.severi.overtime.ui.OvertimeTheme
+import kotlinx.coroutines.flow.MutableStateFlow
 
 fun main() = application {
     val playerResult = remember { runCatching { VlcPlayer() } }
     val vm = remember { playerResult.getOrNull()?.let { AppViewModel(Repository(FileStore()), it) } }
 
     val windowState = rememberWindowState(width = 1280.dp, height = 800.dp)
-    var fullscreen by remember { mutableStateOf(false) }
+    val fullscreen by (vm?.fullscreen ?: MutableStateFlow(false)).collectAsState()
     LaunchedEffect(fullscreen) {
         windowState.placement = if (fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating
     }
@@ -47,10 +47,11 @@ fun main() = application {
         onKeyEvent = { event ->
             if (event.type != KeyEventType.KeyDown || vm == null) return@Window false
             when (event.key) {
-                Key.F, Key.F11 -> { fullscreen = !fullscreen; true }
-                Key.Escape -> if (fullscreen) { fullscreen = false; true } else false
+                Key.F, Key.F11 -> { vm.toggleFullscreen(); true }
+                Key.Escape -> if (fullscreen) { vm.setFullscreen(false); true } else false
                 Key.Spacebar -> { vm.player.togglePause(); true }
                 Key.M -> { vm.player.toggleMute(); true }
+                Key.S -> { vm.toggleSidebar(); true }
                 Key.PageUp -> { vm.step(-1); true }
                 Key.PageDown -> { vm.step(1); true }
                 else -> false
@@ -58,7 +59,7 @@ fun main() = application {
         },
     ) {
         if (vm != null) {
-            App(vm, fullscreen = fullscreen, onToggleFullscreen = { fullscreen = !fullscreen })
+            App(vm)
         } else {
             OvertimeTheme {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

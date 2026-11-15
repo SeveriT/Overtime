@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -59,9 +61,10 @@ private const val OVERLAY_TIMEOUT_MS = 3_000L
 fun PlayerPane(
     vm: AppViewModel,
     fullscreen: Boolean,
-    onToggleFullscreen: () -> Unit,
+    sidebarVisible: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val onToggleFullscreen = vm::toggleFullscreen
     val state by vm.player.state.collectAsState()
     val channel by vm.currentChannel.collectAsState()
     val settings by vm.settings.collectAsState()
@@ -162,6 +165,11 @@ fun PlayerPane(
                         .align(Alignment.BottomStart),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    OverlayButton(
+                        if (sidebarVisible) Icons.AutoMirrored.Filled.MenuOpen else Icons.Default.Menu,
+                        if (sidebarVisible) "Hide channel list" else "Show channel list",
+                    ) { vm.toggleSidebar() }
+                    Spacer(Modifier.width(8.dp))
                     OverlayButton(Icons.Default.SkipPrevious, "Previous channel") { vm.step(-1) }
                     OverlayButton(if (state.paused) Icons.Default.PlayArrow else Icons.Default.Pause, "Play / pause") {
                         vm.player.togglePause()

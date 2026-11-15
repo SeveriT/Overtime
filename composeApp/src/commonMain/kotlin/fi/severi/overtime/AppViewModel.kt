@@ -49,6 +49,27 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     /** Wall clock refreshed every 30 s so EPG progress bars move. */
     val clock = MutableStateFlow(nowMillis())
 
+    val fullscreen = MutableStateFlow(false)
+
+    /** Sidebar shown over the video while fullscreen; not persisted, resets each time fullscreen is entered. */
+    private val fullscreenSidebar = MutableStateFlow(false)
+
+    val sidebarVisible: StateFlow<Boolean> = combine(fullscreen, fullscreenSidebar, _settings) { full, overlay, settings ->
+        if (full) overlay else settings.sidebarVisible
+    }.stateIn(scope, SharingStarted.Eagerly, _settings.value.sidebarVisible)
+
+    fun toggleSidebar() {
+        if (fullscreen.value) fullscreenSidebar.update { !it }
+        else updateSettings { it.copy(sidebarVisible = !it.sidebarVisible) }
+    }
+
+    fun setFullscreen(enabled: Boolean) {
+        if (enabled) fullscreenSidebar.value = false
+        fullscreen.value = enabled
+    }
+
+    fun toggleFullscreen() = setFullscreen(!fullscreen.value)
+
     val groups: StateFlow<List<String>> = combine(_channels, selectedSourceId, _settings) { channels, sourceId, settings ->
         val own = channels[sourceId].orEmpty()
         val sorted = when (settings.groupSort) {
