@@ -62,6 +62,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -122,7 +125,10 @@ fun PlayerPane(
 
     var lastActivity by remember { mutableStateOf(nowMillis()) }
     var overlayVisible by remember { mutableStateOf(true) }
-    val keepVisible = !hasContent || state.paused || state.error != null || state.ended
+    // A toolbar menu is a popup: the mouse over it doesn't count as activity here, so hold the controls
+    // up while one is open (hiding them would close the menu mid-drag), then count down from its closing.
+    var menuOpen by remember { mutableStateOf(false) }
+    val keepVisible = !hasContent || state.paused || state.error != null || state.ended || menuOpen
 
     // Keyboard channel changes reveal the controls just like moving the mouse.
     LaunchedEffect(channel?.id, vod) { lastActivity = nowMillis() }
@@ -290,6 +296,12 @@ fun PlayerPane(
                     }
                 }
 
+                CompositionLocalProvider(
+                    LocalMenuOpenChange provides { open ->
+                        menuOpen = open
+                        lastActivity = nowMillis()
+                    },
+                ) {
                 PlayerToolbar(
                     vm = vm,
                     paused = state.paused,
@@ -302,6 +314,7 @@ fun PlayerPane(
                     onDemand = vod != null,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
                 )
+                }
             }
         }
 
@@ -478,10 +491,18 @@ private fun ToolbarButtons(
         }
 }
 
+/** Toolbar menus report opening and closing so the controls stay up meanwhile. */
+private val LocalMenuOpenChange = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
+
 /** Brightness, contrast and saturation in a menu; highlighted while the picture is adjusted. */
 @Composable
 private fun PictureButton(vm: AppViewModel) {
     var open by remember { mutableStateOf(false) }
+    val onMenuOpenChange = LocalMenuOpenChange.current
+    DisposableEffect(open) {
+        onMenuOpenChange(open)
+        onDispose { if (open) onMenuOpenChange(false) }
+    }
     val picture by vm.picture.collectAsState()
     Box {
         WithTooltip("Picture: brightness, contrast, saturation") {
@@ -505,6 +526,11 @@ private fun PictureButton(vm: AppViewModel) {
 @Composable
 private fun TracksButton(vm: AppViewModel) {
     var open by remember { mutableStateOf(false) }
+    val onMenuOpenChange = LocalMenuOpenChange.current
+    DisposableEffect(open) {
+        onMenuOpenChange(open)
+        onDispose { if (open) onMenuOpenChange(false) }
+    }
     var info by remember { mutableStateOf<TrackInfo?>(null) }
     Box {
         ToolbarButton(Icons.Outlined.Subtitles, "Audio & subtitles (B / V)") {
