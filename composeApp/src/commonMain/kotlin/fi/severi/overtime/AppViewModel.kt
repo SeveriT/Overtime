@@ -7,6 +7,7 @@ import fi.severi.overtime.model.Channel
 import fi.severi.overtime.model.EpgData
 import fi.severi.overtime.model.GROUP_ALL
 import fi.severi.overtime.model.GROUP_FAVORITES
+import fi.severi.overtime.model.GroupSort
 import fi.severi.overtime.model.Programme
 import fi.severi.overtime.model.Source
 import fi.severi.overtime.player.VideoPlayer
@@ -48,10 +49,24 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     /** Wall clock refreshed every 30 s so EPG progress bars move. */
     val clock = MutableStateFlow(nowMillis())
 
-    val groups: StateFlow<List<String>> = combine(_channels, selectedSourceId) { channels, sourceId ->
-        val own = channels[sourceId].orEmpty().asSequence().map { it.group }.distinct().sorted().toList()
-        listOf(GROUP_ALL, GROUP_FAVORITES) + own
+    val groups: StateFlow<List<String>> = combine(_channels, selectedSourceId, _settings) { channels, sourceId, settings ->
+        val own = channels[sourceId].orEmpty()
+        val sorted = when (settings.groupSort) {
+            GroupSort.ALPHABETICAL -> own.asSequence().map { it.group }.distinct().sortedWith(String.CASE_INSENSITIVE_ORDER).toList()
+            GroupSort.PLAYLIST -> own.asSequence().map { it.group }.distinct().toList()
+            GroupSort.SIZE -> own.groupingBy { it.group }.eachCount().entries
+                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.key })
+                .map { it.key }
+        }
+        listOf(GROUP_ALL, GROUP_FAVORITES) + sorted
     }.stateIn(scope, SharingStarted.Eagerly, listOf(GROUP_ALL, GROUP_FAVORITES))
+
+    fun setGroupSort(sort: GroupSort) = updateSettings { it.copy(groupSort = sort) }
+
+    fun cycleGroupSort() {
+        val all = GroupSort.entries
+        setGroupSort(all[(all.indexOf(_settings.value.groupSort) + 1) % all.size])
+    }
 
     val visibleChannels: StateFlow<List<Channel>> =
         combine(_channels, selectedSourceId, selectedGroup, query, _settings) { channels, sourceId, group, query, settings ->

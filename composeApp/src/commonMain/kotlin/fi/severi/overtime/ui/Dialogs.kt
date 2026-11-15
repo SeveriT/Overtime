@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import fi.severi.overtime.AppViewModel
 import fi.severi.overtime.data.nowMillis
+import fi.severi.overtime.model.GroupSort
 import fi.severi.overtime.model.Source
 import fi.severi.overtime.model.SourceType
 
@@ -174,8 +175,19 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
     val settings by vm.settings.collectAsState()
     var userAgent by remember { mutableStateOf(settings.userAgent) }
     var caching by remember { mutableStateOf(settings.networkCachingMs.toString()) }
+    var groupSort by remember { mutableStateOf(settings.groupSort) }
 
     DialogFrame("Settings", onDismiss) {
+        Text("Channel group order", style = MaterialTheme.typography.labelLarge)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            GroupSort.entries.forEachIndexed { index, option ->
+                SegmentedButton(
+                    selected = groupSort == option,
+                    onClick = { groupSort = option },
+                    shape = SegmentedButtonDefaults.itemShape(index, GroupSort.entries.size),
+                ) { Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+        }
         OutlinedTextField(userAgent, { userAgent = it }, label = { Text("HTTP user agent") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(
             caching, { caching = it.filter(Char::isDigit) },
@@ -202,6 +214,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                     it.copy(
                         userAgent = userAgent.trim().ifEmpty { it.userAgent },
                         networkCachingMs = caching.toIntOrNull()?.coerceIn(0, 60_000) ?: it.networkCachingMs,
+                        groupSort = groupSort,
                     )
                 }
                 onDismiss()

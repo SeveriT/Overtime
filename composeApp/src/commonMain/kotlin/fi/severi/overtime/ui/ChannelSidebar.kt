@@ -24,18 +24,24 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -52,6 +58,7 @@ import coil3.compose.AsyncImage
 import fi.severi.overtime.AppViewModel
 import fi.severi.overtime.model.Channel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChannelSidebar(
     vm: AppViewModel,
@@ -94,7 +101,23 @@ fun ChannelSidebar(
                 onPick = vm::selectSource,
             )
         }
-        PickerRow(label = selectedGroup, options = groups.map { it to it }, onPick = { vm.selectedGroup.value = it })
+        Row(Modifier.fillMaxWidth().padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            PickerRow(
+                label = selectedGroup,
+                options = groups.map { it to it },
+                onPick = { vm.selectedGroup.value = it },
+                modifier = Modifier.weight(1f),
+            )
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                tooltip = { PlainTooltip { Text("Group order: ${settings.groupSort.label}") } },
+                state = rememberTooltipState(),
+            ) {
+                IconButton(onClick = { vm.cycleGroupSort() }) {
+                    Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Change group order")
+                }
+            }
+        }
 
         OutlinedTextField(
             value = query,
@@ -161,9 +184,14 @@ fun ChannelSidebar(
 }
 
 @Composable
-private fun PickerRow(label: String, options: List<Pair<String, String>>, onPick: (String) -> Unit) {
+private fun PickerRow(
+    label: String,
+    options: List<Pair<String, String>>,
+    onPick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var open by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+    Box(modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         TextButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Icon(Icons.Default.ArrowDropDown, contentDescription = null)
