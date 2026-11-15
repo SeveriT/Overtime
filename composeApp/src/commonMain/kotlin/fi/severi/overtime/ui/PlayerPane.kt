@@ -45,7 +45,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import fi.severi.overtime.player.MediaTrack
 import fi.severi.overtime.player.TrackInfo
-import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.outlined.ViewTimeline
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ContainedLoadingIndicator
@@ -391,7 +390,6 @@ private fun ToolbarButtons(
     media: MediaProgress?,
     onDemand: Boolean,
 ) {
-    val hasLibrary by vm.hasLibrary.collectAsState()
     val vodContext by vm.vodContext.collectAsState()
     val canSkip = timeshift != null || media != null
     // The sidebar shows what's playing: channels, a series' episodes, or a movie's details.
@@ -411,9 +409,6 @@ private fun ToolbarButtons(
                 if (sidebarVisible) "Hide $sidebarName (S)" else "Show $sidebarName (S)",
             ) { vm.toggleSidebar() }
             if (!onDemand) ToolbarButton(Icons.Outlined.ViewTimeline, "Programme guide (G)") { vm.openGuide() }
-            if (hasLibrary) {
-                ToolbarButton(Icons.Outlined.VideoLibrary, "Movies & series (L)") { vm.openLibrary() }
-            }
 
             VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
