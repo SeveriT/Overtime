@@ -1,12 +1,15 @@
 package fi.severi.overtime.player
 
+import fi.severi.overtime.model.PictureAdjust
 import fi.severi.overtime.model.SubtitleStyle
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -212,6 +215,13 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
 
     /** Seek position is only meaningful for movies and episodes; live HLS reports a sliding "length". */
     @Volatile private var onDemand = false
+
+    /** Brightness, contrast and saturation, applied by the surfaces while drawing. */
+    internal val picture = MutableStateFlow(PictureAdjust())
+
+    override fun setPicture(adjust: PictureAdjust) {
+        picture.value = adjust
+    }
 
     /** Sample aspect ratio of the playing video (1 for square pixels), read from the stream. */
     @Volatile internal var pixelAspect = 1f
@@ -551,27 +561,48 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
 }
 
 @Composable
-actual fun VideoSurface(player: VideoPlayer, modifier: Modifier, aspect: AspectMode) {
+actual fun VideoSurface(player: VideoPlayer, modifier: Modifier) {
     val vlc = player as? VlcPlayer ?: return
     val frame by vlc.frame.collectAsState()
     val yuvVersion by vlc.yuv.version.collectAsState()
-    // Zoom draws past the edges; keep it inside the player area.
-    Canvas(modifier.clipToBounds()) {
+    val adjust by vlc.picture.collectAsState()
+    // The RGB fallback path gets the same adjustments as a colour matrix.
+    val colorFilter = remember(adjust) { if (adjust.isDefault) null else ColorFilter.colorMatrix(adjust.toColorMatrix()) }
+    Canvas(modifier) {
         if (vlc.usingYuv) {
             @Suppress("UNUSED_EXPRESSION") yuvVersion // read here so each new frame redraws
             val renderer = vlc.yuv
             if (renderer.width == 0 || !renderer.hasFrame) return@Canvas
-            val r = videoRect(size, renderer.width, renderer.height, vlc.pixelAspect, aspect)
-            drawIntoCanvas { renderer.draw(it.skiaCanvas, r.left, r.top, r.width / renderer.width, r.height / renderer.height) }
+            val r = videoRect(size, renderer.width, renderer.height, vlc.pixelAspect)
+            drawIntoCanvas { renderer.draw(it.skiaCanvas, r.left, r.top, r.width / renderer.width, r.height / renderer.height, adjust) }
             return@Canvas
         }
         val image = frame ?: return@Canvas
-        val r = videoRect(size, image.width, image.height, vlc.pixelAspect, aspect)
+        val r = videoRect(size, image.width, image.height, vlc.pixelAspect)
         drawImage(
             image = image,
             dstOffset = IntOffset(r.left.roundToInt(), r.top.roundToInt()),
             dstSize = IntSize(r.width.roundToInt(), r.height.roundToInt()),
             filterQuality = FilterQuality.Medium,
+            colorFilter = colorFilter,
         )
+    }
+}
+
+/** The shader's adjustments as a colour matrix: contrast and brightness first, then saturation. */
+private fun PictureAdjust.toColorMatrix(): ColorMatrix {
+    val k = contrast
+    val offset = (0.5f - 0.5f * k + brightness) * 255f
+    val contrastBrightness = ColorMatrix(
+        floatArrayOf(
+            k, 0f, 0f, 0f, offset,
+            0f, k, 0f, 0f, offset,
+            0f, 0f, k, 0f, offset,
+            0f, 0f, 0f, 1f, 0f,
+        ),
+    )
+    return ColorMatrix().apply {
+        setToSaturation(saturation)
+        timesAssign(contrastBrightness)
     }
 }

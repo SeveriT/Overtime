@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import fi.severi.overtime.model.PictureAdjust
 import fi.severi.overtime.model.SubtitleStyle
 import kotlinx.coroutines.flow.StateFlow
 
@@ -123,38 +124,26 @@ interface VideoPlayer {
 
     /** Restyles subtitles; whatever is playing carries on from the same spot. */
     fun setSubtitleStyle(style: SubtitleStyle) = Unit
-}
 
-/** How the picture is fitted to the player area. [ratio] forces a display shape (width / height). */
-enum class AspectMode(val label: String, val ratio: Float?) {
-    AUTO("Auto", null),
-    WIDE("16:9", 16f / 9f),
-    STANDARD("4:3", 4f / 3f),
-    CINEMA("21:9", 64f / 27f),
-    /** Fills the area keeping the shape, cropping the edges. */
-    ZOOM("Zoom", null),
+    /** Brightness, contrast and saturation for every video surface; applies immediately. */
+    fun setPicture(adjust: PictureAdjust) = Unit
 }
 
 /**
- * Where a [frameWidth] x [frameHeight] frame goes inside [container]. [pixelAspect] is the stream's
- * sample aspect ratio (non-square pixels on some SD channels). ZOOM overflows the container, so clip.
+ * Where a [frameWidth] x [frameHeight] frame goes inside [container]: as large as fits, in the stream's
+ * own shape. [pixelAspect] is the sample aspect ratio (non-square pixels on some SD channels).
  */
-fun videoRect(container: Size, frameWidth: Int, frameHeight: Int, pixelAspect: Float, mode: AspectMode): Rect {
+fun videoRect(container: Size, frameWidth: Int, frameHeight: Int, pixelAspect: Float): Rect {
     if (frameWidth <= 0 || frameHeight <= 0 || container.width <= 0f || container.height <= 0f) return Rect(Offset.Zero, container)
-    val source = frameWidth * pixelAspect / frameHeight
-    return when (mode) {
-        AspectMode.ZOOM -> fitted(container, source, cover = true)
-        else -> fitted(container, mode.ratio ?: source, cover = false)
+    val aspect = frameWidth * pixelAspect / frameHeight
+    val size = if (aspect > container.width / container.height) {
+        Size(container.width, container.width / aspect)
+    } else {
+        Size(container.height * aspect, container.height)
     }
-}
-
-private fun fitted(container: Size, aspect: Float, cover: Boolean): Rect {
-    val wider = aspect > container.width / container.height
-    // Fit: a wider picture spans the width. Cover: it spans the height and overflows sideways.
-    val size = if (wider != cover) Size(container.width, container.width / aspect) else Size(container.height * aspect, container.height)
     return Rect(Offset((container.width - size.width) / 2, (container.height - size.height) / 2), size)
 }
 
-/** Draws the player's current video frame inside the given bounds, shaped by [aspect]. */
+/** Draws the player's current video frame, letterboxed inside the given bounds. */
 @Composable
-expect fun VideoSurface(player: VideoPlayer, modifier: Modifier = Modifier, aspect: AspectMode = AspectMode.AUTO)
+expect fun VideoSurface(player: VideoPlayer, modifier: Modifier = Modifier)

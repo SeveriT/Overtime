@@ -1,6 +1,7 @@
 package fi.severi.overtime.player
 
 import com.sun.jna.Pointer
+import fi.severi.overtime.model.PictureAdjust
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -92,7 +93,7 @@ internal class YuvRenderer {
     }
 
     /** Draws the newest frame at [left],[top] scaled by [scale]. */
-    fun draw(canvas: Canvas, left: Float, top: Float, scaleX: Float, scaleY: Float = scaleX) {
+    fun draw(canvas: Canvas, left: Float, top: Float, scaleX: Float, scaleY: Float = scaleX, adjust: PictureAdjust = PictureAdjust()) {
         val program = effect ?: return
         val index = synchronized(lock) {
             if (front < 0) return
@@ -116,6 +117,9 @@ internal class YuvRenderer {
             builder.uniform("rCoef", c[0], c[1], c[2])
             builder.uniform("gCoef", c[3], c[4], c[5])
             builder.uniform("bCoef", c[6], c[7], c[8])
+            builder.uniform("brightness", adjust.brightness)
+            builder.uniform("contrast", adjust.contrast)
+            builder.uniform("saturation", adjust.saturation)
             val shader = builder.makeShader()
             paint.shader = shader
             canvas.save()
@@ -147,6 +151,9 @@ internal class YuvRenderer {
             uniform float3 rCoef;
             uniform float3 gCoef;
             uniform float3 bCoef;
+            uniform float brightness;
+            uniform float contrast;
+            uniform float saturation;
 
             half4 main(float2 p) {
                 float2 c = p * 0.5;                          // chroma planes are half size
@@ -155,6 +162,10 @@ internal class YuvRenderer {
                     uTex.eval(c).r - 0.5019608,              // 128/255
                     vTex.eval(c).r - 0.5019608);
                 float3 rgb = float3(dot(rCoef, yuv), dot(gCoef, yuv), dot(bCoef, yuv));
+                // Picture adjustments: contrast around mid-grey, brightness offset, saturation around luma.
+                rgb = (rgb - 0.5) * contrast + 0.5 + brightness;
+                float luma = dot(rgb, float3(0.2126, 0.7152, 0.0722));
+                rgb = mix(float3(luma), rgb, saturation);
                 return half4(half3(saturate(rgb)), 1.0);
             }
         """

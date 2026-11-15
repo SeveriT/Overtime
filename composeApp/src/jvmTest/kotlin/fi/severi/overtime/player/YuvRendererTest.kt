@@ -1,5 +1,6 @@
 package fi.severi.overtime.player
 
+import fi.severi.overtime.model.PictureAdjust
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Color
 import org.jetbrains.skia.Surface
@@ -23,12 +24,12 @@ class YuvRendererTest {
     }
 
     /** Renders one frame at 1:1 and returns the centre pixel as (r, g, b). */
-    private fun render(y: Int, u: Int, v: Int): Triple<Int, Int, Int> {
+    private fun render(y: Int, u: Int, v: Int, adjust: PictureAdjust = PictureAdjust()): Triple<Int, Int, Int> {
         val renderer = YuvRenderer()
         renderer.configure(width, height)
         renderer.write(frame(y, u, v))
         val surface = Surface.makeRasterN32Premul(width, height)
-        renderer.draw(surface.canvas, 0f, 0f, 1f)
+        renderer.draw(surface.canvas, 0f, 0f, 1f, adjust = adjust)
         val bitmap = Bitmap()
         bitmap.allocN32Pixels(width, height)
         surface.makeImageSnapshot().readPixels(bitmap, 0, 0)
@@ -42,6 +43,16 @@ class YuvRendererTest {
             abs(expected.second - actual.second) <= 6 &&
             abs(expected.third - actual.third) <= 6
         assertTrue(close, "$label: expected $expected, got $actual")
+    }
+
+    @Test
+    fun appliesPictureAdjustments() {
+        // No saturation turns red into its grey (BT.709 luma of pure red ≈ 0.2126).
+        assertColor(Triple(54, 54, 54), render(63, 102, 240, PictureAdjust(saturation = 0f)), "desaturated red")
+        // Brightness +0.25 lifts black to a quarter grey.
+        assertColor(Triple(64, 64, 64), render(16, 128, 128, PictureAdjust(brightness = 0.25f)), "brightened black")
+        // Half contrast pulls white towards mid-grey: (1 - 0.5) * 0.5 + 0.5 = 0.75.
+        assertColor(Triple(191, 191, 191), render(235, 128, 128, PictureAdjust(contrast = 0.5f)), "low-contrast white")
     }
 
     @Test

@@ -2,6 +2,7 @@ package fi.severi.overtime
 
 import fi.severi.overtime.data.Repository
 import fi.severi.overtime.data.nowMillis
+import fi.severi.overtime.model.PictureAdjust
 import fi.severi.overtime.model.AppSettings
 import fi.severi.overtime.model.Channel
 import fi.severi.overtime.model.EpgData
@@ -20,7 +21,6 @@ import fi.severi.overtime.model.GroupEntry
 import fi.severi.overtime.model.GroupSort
 import fi.severi.overtime.model.Programme
 import fi.severi.overtime.model.Source
-import fi.severi.overtime.player.AspectMode
 import fi.severi.overtime.player.VideoPlayer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -175,8 +175,24 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     val epgForSelectedSource: StateFlow<EpgData> = combine(_epg, selectedSourceId) { epg, id -> epg[id] ?: EpgData() }
         .stateIn(scope, SharingStarted.Eagerly, EpgData())
 
+    /** Live picture adjustments; saved to settings when a slider is released. */
+    val picture = MutableStateFlow(_settings.value.picture)
+
+    fun adjustPicture(adjust: PictureAdjust) {
+        picture.value = adjust
+        player.setPicture(adjust)
+    }
+
+    fun savePicture() = updateSettings { it.copy(picture = picture.value) }
+
+    fun resetPicture() {
+        adjustPicture(PictureAdjust())
+        savePicture()
+    }
+
     init {
         player.setVolume(_settings.value.volume)
+        player.setPicture(picture.value)
         scope.launch {
             while (true) {
                 delay(30_000)
@@ -503,11 +519,6 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     val statsVisible = MutableStateFlow(false)
 
     fun toggleStats() = statsVisible.update { !it }
-
-    /** Picture shape for the main player; kept across channels until changed. */
-    val aspect = MutableStateFlow(AspectMode.AUTO)
-
-    fun cycleAspect() = aspect.update { AspectMode.entries[(it.ordinal + 1) % AspectMode.entries.size] }
 
     /** Moves to the previous (-1) or next (+1) channel within the selected group. */
     fun step(delta: Int) {

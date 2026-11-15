@@ -28,8 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
-import fi.severi.overtime.player.AspectMode
-import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
@@ -167,8 +166,7 @@ fun PlayerPane(
                 )
             },
     ) {
-        val aspect by vm.aspect.collectAsState()
-        VideoSurface(vm.player, Modifier.fillMaxSize(), aspect)
+        VideoSurface(vm.player, Modifier.fillMaxSize())
 
         when {
             !hasContent -> CenterMessage("Pick a channel from the list")
@@ -472,7 +470,7 @@ private fun ToolbarButtons(
             VolumeSlider(volume, muted, onVolumeChange = vm::setVolume, modifier = Modifier.width(150.dp))
 
             TracksButton(vm)
-            AspectButton(vm)
+            PictureButton(vm)
             ToolbarButton(
                 if (fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                 if (fullscreen) "Exit fullscreen (F)" else "Fullscreen (F)",
@@ -480,40 +478,24 @@ private fun ToolbarButtons(
         }
 }
 
-/** Picture shape menu: Auto, fixed ratios, Stretch and Zoom. */
+/** Brightness, contrast and saturation in a menu; highlighted while the picture is adjusted. */
 @Composable
-private fun AspectButton(vm: AppViewModel) {
+private fun PictureButton(vm: AppViewModel) {
     var open by remember { mutableStateOf(false) }
-    val aspect by vm.aspect.collectAsState()
+    val picture by vm.picture.collectAsState()
     Box {
-        WithTooltip("Aspect ratio: ${aspect.label} (A)") {
+        WithTooltip("Picture: brightness, contrast, saturation") {
             FilledTonalIconToggleButton(
-                // Highlighted while something other than Auto is forced.
-                checked = aspect != AspectMode.AUTO,
+                checked = !picture.isDefault,
                 onCheckedChange = { open = true },
                 shapes = IconButtonDefaults.toggleableShapes(),
             ) {
-                Icon(Icons.Default.AspectRatio, contentDescription = "Aspect ratio")
+                Icon(Icons.Default.Tune, contentDescription = "Picture settings")
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = MaterialTheme.shapes.large) {
-            Text(
-                "Aspect ratio",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            AspectMode.entries.forEach { mode ->
-                DropdownMenuItem(
-                    text = { Text(mode.label) },
-                    onClick = {
-                        vm.aspect.value = mode
-                        open = false
-                    },
-                    leadingIcon = {
-                        if (mode == aspect) Icon(Icons.Default.Check, contentDescription = "Selected") else Spacer(Modifier.size(24.dp))
-                    },
-                )
+            Column(Modifier.width(340.dp).padding(start = 16.dp, end = 8.dp, bottom = 8.dp)) {
+                PictureControls(vm)
             }
         }
     }

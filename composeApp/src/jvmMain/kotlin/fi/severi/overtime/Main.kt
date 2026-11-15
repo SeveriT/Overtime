@@ -166,7 +166,6 @@ fun main() = application {
                 Key.M -> { vm.player.toggleMute(); true }
                 Key.S -> { vm.toggleSidebar(); true }
                 Key.I -> { vm.toggleStats(); true }
-                Key.A -> { vm.cycleAspect(); true }
                 Key.B -> { vm.cycleAudioTrack(); true }
                 Key.V -> { vm.cycleSubtitles(); true }
                 // Movies seek with plain arrows; live TV changes channel unless Shift is held.

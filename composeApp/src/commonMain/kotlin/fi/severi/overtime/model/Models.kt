@@ -124,9 +124,19 @@ data class AppSettings(
     val favorites: Set<String> = emptySet(),
     val volume: Int = 100,
     val subtitles: SubtitleStyle = SubtitleStyle(),
+    val picture: PictureAdjust = PictureAdjust(),
     /** Window bounds (dp) when it was last closed, restored at launch; null until first closed. */
     val window: WindowBounds? = null,
 )
+
+/**
+ * Picture adjustments applied while drawing: [brightness] is an offset (-0.5..0.5, 0 = none),
+ * [contrast] (0.5..1.5) and [saturation] (0..2) are factors, 1 = none.
+ */
+@Serializable
+data class PictureAdjust(val brightness: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f) {
+    val isDefault: Boolean get() = this == PictureAdjust()
+}
 
 /** How VLC draws plain-text subtitles (SRT and the like); styled ASS subtitles keep their own look. */
 @Serializable

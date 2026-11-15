@@ -3,6 +3,8 @@ package fi.severi.overtime.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -64,7 +66,8 @@ fun StreamInfoPanel(vm: AppViewModel, modifier: Modifier = Modifier) {
         shadowElevation = 8.dp,
         modifier = modifier.width(320.dp),
     ) {
-        Column(Modifier.padding(start = 24.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)) {
+        // Scrolls when the window is too short for stats, picture controls and the copy button.
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "Stream info",
