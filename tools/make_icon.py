@@ -1,137 +1,170 @@
 """Generates the Overtime app icon: a master PNG, the window icon PNG and a multi-size Windows ICO.
 
-Styled as a sibling of the Overclock icon (a bumper plate): dark rim with stopwatch ticks,
-blue band with OVERTIME set around it and TV on the sides, light hub with a play button.
+Design: the Material Symbols "live_tv" glyph (Outlined) in white on a rounded square in Overtime's blue,
+with the play triangle in coral red to echo the app's LIVE badge. Large sizes use the 48 px optical size;
+small sizes use the heavier 20 px one so the strokes stay crisp at 16-32 px.
+
+Glyph sources (Apache 2.0, google/material-design-icons): tools/symbols/live_tv_{20,48}px.svg
 
 Run from the repo root:  python tools/make_icon.py
 """
-import math
-import sys
+import re
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 ICON_DIR = ROOT / "composeApp" / "icons"
 RES_DIR = ROOT / "composeApp" / "src" / "jvmMain" / "resources"
+SYMBOLS = Path(__file__).resolve().parent / "symbols"
 
-FONTS = [r"C:\Windows\Fonts\ariblk.ttf", r"C:\Windows\Fonts\arialbd.ttf"]
-
-RIM = (20, 22, 27)
-TICK_MINOR = (78, 85, 98)
-TICK_MAJOR = (150, 157, 170)
-BAND = (31, 79, 168)
-BAND_EDGE = (232, 236, 242)
-HUB = (206, 209, 215)
-HUB_RING = (148, 153, 162)
-TEXT = (255, 255, 255)
-
-BASE = 1024  # design units
-SS = 4  # supersampling factor for smooth edges
+BACKGROUND = (31, 79, 168)    # Overtime blue (#1F4FA8)
+GLYPH = (255, 255, 255)
+PLAY = (255, 107, 94)         # coral red, like the LIVE badge
 
 ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
-SIMPLE_MAX = 48  # sizes up to this drop text and ticks, which turn to mush when tiny
+SMALL_MAX = 32                # sizes up to this use the 20 px optical size
+SS = 8                        # supersampling factor
+
+# ---- tiny SVG path reader (M L H V Q T C S Z, absolute and relative) -------------------
+
+_TOKEN = re.compile(r"[MmLlHhVvQqTtCcSsZz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
+_ARGS = {"M": 2, "L": 2, "H": 1, "V": 1, "Q": 4, "T": 2, "C": 6, "S": 4, "Z": 0}
+_STEPS = 16
 
 
-def load_font(size):
-    for path in FONTS:
-        if Path(path).exists():
-            return ImageFont.truetype(path, size)
-    sys.exit("No bold system font found")
+def _quad(p0, p1, p2):
+    return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0],
+             (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1])
+            for t in (i / _STEPS for i in range(1, _STEPS + 1))]
 
 
-def cap_height(font):
-    return -font.getbbox("H", anchor="ls")[1]
+def _cubic(p0, p1, p2, p3):
+    return [((1 - t) ** 3 * p0[0] + 3 * (1 - t) ** 2 * t * p1[0] + 3 * (1 - t) * t * t * p2[0] + t ** 3 * p3[0],
+             (1 - t) ** 3 * p0[1] + 3 * (1 - t) ** 2 * t * p1[1] + 3 * (1 - t) * t * t * p2[1] + t ** 3 * p3[1])
+            for t in (i / _STEPS for i in range(1, _STEPS + 1))]
 
 
-def circle(draw, c, r, fill):
-    draw.ellipse([c - r, c - r, c + r, c + r], fill=fill)
+def parse_path(d):
+    """Flattens an SVG path into a list of closed polygons (lists of (x, y))."""
+    tokens = _TOKEN.findall(d)
+    polygons, current = [], []
+    x = y = sx = sy = 0.0
+    last_ctrl, last_cmd, cmd, i = None, None, None, 0
+    while i < len(tokens):
+        if tokens[i].isalpha():
+            cmd = tokens[i]
+            i += 1
+        elif cmd in ("M", "m"):
+            cmd = "L" if cmd == "M" else "l"  # extra pairs after a move are lines
+        up = cmd.upper()
+        rel = cmd.islower()
+        args = [float(t) for t in tokens[i:i + _ARGS[up]]]
+        i += _ARGS[up]
+        ox, oy = (x, y) if rel else (0.0, 0.0)
+        if up == "M":
+            if len(current) > 2:
+                polygons.append(current)
+            x, y = ox + args[0], oy + args[1]
+            sx, sy = x, y
+            current = [(x, y)]
+        elif up == "L":
+            x, y = ox + args[0], oy + args[1]
+            current.append((x, y))
+        elif up == "H":
+            x = (x if rel else 0.0) + args[0]
+            current.append((x, y))
+        elif up == "V":
+            y = (y if rel else 0.0) + args[0]
+            current.append((x, y))
+        elif up in ("Q", "T"):
+            if up == "Q":
+                c = (ox + args[0], oy + args[1])
+                end = (ox + args[2], oy + args[3])
+            else:
+                c = (2 * x - last_ctrl[0], 2 * y - last_ctrl[1]) if last_cmd in ("Q", "T") else (x, y)
+                end = (ox + args[0], oy + args[1])
+            current += _quad((x, y), c, end)
+            last_ctrl = c
+            x, y = end
+        elif up in ("C", "S"):
+            if up == "C":
+                c1 = (ox + args[0], oy + args[1])
+                c2 = (ox + args[2], oy + args[3])
+                end = (ox + args[4], oy + args[5])
+            else:
+                c1 = (2 * x - last_ctrl[0], 2 * y - last_ctrl[1]) if last_cmd in ("C", "S") else (x, y)
+                c2 = (ox + args[0], oy + args[1])
+                end = (ox + args[2], oy + args[3])
+            current += _cubic((x, y), c1, c2, end)
+            last_ctrl = c2
+            x, y = end
+        elif up == "Z":
+            if len(current) > 2:
+                polygons.append(current)
+            current = []
+            x, y = sx, sy
+        last_cmd = up
+    if len(current) > 2:
+        polygons.append(current)
+    return polygons
 
 
-def arc_text(img, text, font, c, radius, mid_deg, tracking):
-    """Sets text around a circle, glyph tops facing outward, reading clockwise, centred on mid_deg (0 = 12 o'clock)."""
-    widths = [font.getlength(ch) for ch in text]
-    total = sum(widths) + tracking * (len(text) - 1)
-    angle = mid_deg - math.degrees(total / radius) / 2
-    cap = cap_height(font)
-    tile = int(font.size * 2)
-    for ch, w in zip(text, widths):
-        a = angle + math.degrees(w / 2 / radius)
-        glyph = Image.new("L", (tile, tile), 0)
-        ImageDraw.Draw(glyph).text((tile / 2, tile / 2 + cap / 2), ch, font=font, fill=255, anchor="ms")
-        glyph = glyph.rotate(-a, resample=Image.BICUBIC)
-        x = c + radius * math.sin(math.radians(a)) - tile / 2
-        y = c - radius * math.cos(math.radians(a)) - tile / 2
-        img.paste(Image.new("RGBA", (tile, tile), TEXT + (255,)), (round(x), round(y)), glyph)
-        angle += math.degrees((w + tracking) / radius)
+def load_symbol(px):
+    svg = (SYMBOLS / f"live_tv_{px}px.svg").read_text()
+    return parse_path(re.search(r'\sd="([^"]+)"', svg).group(1))
 
 
-def render(detailed):
-    s = BASE * SS
-    c = s / 2
-    u = lambda v: v * SS  # design units -> pixels
+def _area(poly):
+    return sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(poly, poly[1:] + poly[:1])) / 2
+
+
+def _mask(polygons, size, scale, offset):
+    """Even-odd fill: XOR of every polygon, which keeps the screen hollow and the triangle solid."""
+    mask = Image.new("1", (size, size), 0)
+    for poly in polygons:
+        layer = Image.new("1", (size, size), 0)
+        pts = [(offset + px * scale, offset + (py + 960) * scale) for px, py in poly]  # viewBox is 0 -960 960 960
+        ImageDraw.Draw(layer).polygon(pts, fill=1)
+        mask = ImageChops.logical_xor(mask, layer)
+    return mask.convert("L")
+
+
+# ---- icon --------------------------------------------------------------------------
+
+def render(size):
+    small = size <= SMALL_MAX
+    s = max(size * SS, 1024)
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
 
-    circle(d, c, u(500), RIM)
+    # Rounded square, nearly full bleed, corner ≈ 22 % (an extra-large M3 corner at icon scale).
+    margin = round(s * (0.02 if small else 0.04))
+    radius = round(s * 0.22)
+    ImageDraw.Draw(img).rounded_rectangle([margin, margin, s - margin - 1, s - margin - 1], radius, fill=BACKGROUND)
 
-    if detailed:
-        for i in range(60):
-            a = math.radians(i * 6)
-            major = i % 5 == 0
-            r1, r2 = (u(446), u(488)) if major else (u(466), u(488))
-            d.line(
-                [(c + r1 * math.sin(a), c - r1 * math.cos(a)), (c + r2 * math.sin(a), c - r2 * math.cos(a))],
-                fill=TICK_MAJOR if major else TICK_MINOR,
-                width=round(u(11 if major else 5)),
-            )
+    polygons = load_symbol(20 if small else 48)
+    # The glyph's play triangle is the one subpath that sits wholly inside the screen; colour it separately.
+    triangle = min((p for p in polygons if abs(_area(p)) > 1), key=lambda p: abs(_area(p)))
+    body = [p for p in polygons if p is not triangle]
 
-    if detailed:
-        circle(d, c, u(410), BAND)
-        circle(d, c, u(232), BAND_EDGE)
-        circle(d, c, u(222), HUB)
-        d.ellipse([c - u(160), c - u(160), c + u(160), c + u(160)], outline=HUB_RING, width=round(u(12)))
-        r = u(118)
-    else:
-        # Small sizes: thin rim, big hub and play button so the shape survives at 16 px.
-        circle(d, c, u(452), BAND)
-        circle(d, c, u(300), HUB)
-        r = u(190)
+    glyph_box = s * (0.80 if small else 0.66)  # small sizes get a bigger glyph
+    scale = glyph_box / 960
+    offset = (s - glyph_box) / 2
 
-    # Play button, centred on its centroid.
-    pts = [(c + r * math.cos(math.radians(t)), c + r * math.sin(math.radians(t))) for t in (0, 120, 240)]
-    d.polygon(pts, fill=RIM)
-
-    if detailed:
-        font = load_font(round(u(84)))
-        text_r = u(321)
-        arc_text(img, "OVERTIME", font, c, text_r, 0, u(10))
-        arc_text(img, "OVERTIME", font, c, text_r, 180, u(10))
-        side = load_font(round(u(64)))
-        cap = cap_height(side)
-        d.text((c - text_r, c + cap / 2), "TV", font=side, fill=TEXT, anchor="ms")
-        d.text((c + text_r, c + cap / 2), "TV", font=side, fill=TEXT, anchor="ms")
-
-    return img
+    img.paste(Image.new("RGBA", (s, s), GLYPH + (255,)), (0, 0), _mask(body, s, scale, offset))
+    img.paste(Image.new("RGBA", (s, s), PLAY + (255,)), (0, 0), _mask([triangle], s, scale, offset))
+    return img.resize((size, size), Image.LANCZOS)
 
 
 def main():
     ICON_DIR.mkdir(parents=True, exist_ok=True)
     RES_DIR.mkdir(parents=True, exist_ok=True)
 
-    detailed = render(True)
-    simple = render(False)
+    render(1024).save(ICON_DIR / "overtime.png")
+    render(256).save(RES_DIR / "overtime_icon.png")
 
-    def at(size):
-        source = simple if size <= SIMPLE_MAX else detailed
-        return source.resize((size, size), Image.LANCZOS)
-
-    at(1024).save(ICON_DIR / "overtime.png")
-    at(256).save(RES_DIR / "overtime_icon.png")
-
-    images = [at(size) for size in ICO_SIZES]
-    largest = images[-1]
-    largest.save(
+    images = [render(size) for size in ICO_SIZES]
+    images[-1].save(
         ICON_DIR / "overtime.ico",
         sizes=[(size, size) for size in ICO_SIZES],
         append_images=images[:-1],
