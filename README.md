@@ -1,6 +1,6 @@
 # Overtime
 
-A lean IPTV player for Windows, built with Kotlin, Compose Multiplatform and libVLC.
+IPTV player for Windows, built with Kotlin, Compose Multiplatform and libVLC.
 
 ## Features (0.1.0)
 
