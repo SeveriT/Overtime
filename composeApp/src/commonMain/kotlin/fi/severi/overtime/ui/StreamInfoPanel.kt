@@ -3,11 +3,17 @@ package fi.severi.overtime.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -17,12 +23,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,6 +41,7 @@ import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 private const val REFRESH_MS = 1_000L
+private const val COPIED_MS = 2_000L
 
 /**
  * Stream details card: resolution and frame rate up top as the headline, then codec, bitrate,
@@ -97,8 +107,40 @@ fun StreamInfoPanel(vm: AppViewModel, modifier: Modifier = Modifier) {
                 if (s?.bufferMs != null) {
                     InfoRow("Rewind buffer", "${formatMinutes(s.bufferMs)} · ${formatBytes(s.bufferBytes ?: 0)}")
                 }
+                val url by vm.streamUrl.collectAsState()
+                url?.let { CopyUrlButton(it) }
             }
         }
+    }
+}
+
+/** Copies the stream address (it can hold login details, so it isn't shown). Confirms for a moment. */
+@Composable
+private fun CopyUrlButton(url: String) {
+    @Suppress("DEPRECATION") // LocalClipboard's ClipEntry has no common text constructor yet.
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(COPIED_MS)
+            copied = false
+        }
+    }
+    FilledTonalButton(
+        onClick = {
+            clipboard.setText(AnnotatedString(url))
+            copied = true
+        },
+        shapes = ButtonDefaults.shapes(),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    ) {
+        Icon(
+            if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+            contentDescription = null,
+            modifier = Modifier.size(ButtonDefaults.IconSize),
+        )
+        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+        Text(if (copied) "Copied" else "Copy stream URL")
     }
 }
 

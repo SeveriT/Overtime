@@ -64,6 +64,9 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     /** The movie or episode playing, when it's on-demand rather than a channel. */
     val currentVod = MutableStateFlow<VodPlayback?>(null)
 
+    /** Address of what's playing (channel, movie or episode), for copying from the stream info panel. */
+    val streamUrl = MutableStateFlow<String?>(null)
+
     /** Movies & series of Xtream sources. */
     val library = LibraryModel(repo, scope, sources)
 
@@ -255,6 +258,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         player.stop()
         currentChannel.value = null
         currentVod.value = null
+        streamUrl.value = null
         vodContext.value = null
         updateSettings { it.copy(lastChannelId = null) }
     }
@@ -383,6 +387,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         val s = _settings.value
         val resumeAt = if (fromStart) 0L else history.resumeAt(entry.key) ?: 0L
         player.play(url, s.networkCachingMs, s.userAgent, rewindBufferMs = 0, startMs = resumeAt, onDemand = true)
+        streamUrl.value = url
         awaitingStart = true
         playingEntry = entry
         nextEpisode = next
@@ -443,6 +448,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         val s = _settings.value
         val rewindMs = if (s.rewindEnabled) s.rewindMinutes * 60_000L else 0L
         player.play(channel.url, s.networkCachingMs, s.userAgent, rewindMs)
+        streamUrl.value = channel.url
         updateSettings { it.copy(lastChannelId = channel.id, lastSourceId = channel.sourceId) }
     }
 
