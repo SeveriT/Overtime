@@ -1,5 +1,6 @@
 package fi.severi.overtime.player
 
+import fi.severi.overtime.model.SubtitleStyle
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -51,9 +52,17 @@ import kotlin.math.roundToInt
  * libVLC-backed player. Video frames are rendered through a callback surface into a Compose [ImageBitmap],
  * so the picture is an ordinary composable and overlays draw on top of it without AWT interop.
  */
-class VlcPlayer : VideoPlayer {
-    private val factory: MediaPlayerFactory
-    private val player: EmbeddedMediaPlayer
+class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : VideoPlayer {
+    // Replaced together when the subtitle style changes (VLC reads it only at start-up).
+    @Volatile private var factory: MediaPlayerFactory
+    @Volatile private var player: EmbeddedMediaPlayer
+
+    /** Audio and subtitle track to pick again once playback restarts (seek in the buffer, restyle). */
+    @Volatile private var pendingTracks: Pair<Int, Int>? = null
+
+    /** The live stream or file being played, for restarting it after a restyle. */
+    private data class PlayRequest(val url: String, val networkCachingMs: Int, val userAgent: String)
+    @Volatile private var lastPlay: PlayRequest? = null
 
     private val _state = MutableStateFlow(PlayerState())
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
@@ -115,54 +124,72 @@ class VlcPlayer : VideoPlayer {
     /** Frames handed to the screen so far (for tests and the fps readout). */
     fun framesShown(): Long = framesDrawn.get()
 
+    private val events = object : MediaPlayerEventAdapter() {
+        override fun playing(mediaPlayer: MediaPlayer) {
+            if (runningSince == 0L) runningSince = System.currentTimeMillis()
+            pendingTracks?.let { (audio, subtitle) ->
+                pendingTracks = null
+                // Not from VLC's event thread; give the tracks a moment to be listed.
+                scope.launch {
+                    delay(TRACK_RESTORE_DELAY_MS)
+                    if (audio >= 0) player.audio().setTrack(audio)
+                    player.subpictures().setTrack(subtitle)
+                }
+            }
+            _state.update { it.copy(playing = true, paused = false, buffering = null, error = null) }
+        }
+
+        override fun paused(mediaPlayer: MediaPlayer) {
+            if (runningSince != 0L) {
+                playedBeforeMs += System.currentTimeMillis() - runningSince
+                runningSince = 0L
+            }
+            _state.update { it.copy(paused = true) }
+        }
+
+        override fun stopped(mediaPlayer: MediaPlayer) {
+            _state.update { it.copy(playing = false, paused = false, buffering = null) }
+            // While time-shifting, a seek restarts VLC; keep the last frame up instead of flashing black.
+            if (recorder == null) {
+                _frame.value = null
+                yuv.clear()
+            }
+        }
+
+        override fun buffering(mediaPlayer: MediaPlayer, newCache: Float) {
+            _state.update { it.copy(buffering = if (newCache >= 100f) null else newCache) }
+        }
+
+        override fun error(mediaPlayer: MediaPlayer) {
+            _state.update { it.copy(playing = false, buffering = null, error = "Stream could not be played") }
+        }
+
+        override fun finished(mediaPlayer: MediaPlayer) {
+            // A buffered input only "ends" because we replaced it (seek) or stopped recording.
+            if (recorder != null) return
+            // A movie or episode reaching its end is normal; a live stream ending is not.
+            if (_state.value.media != null) {
+                _state.update { it.copy(playing = false, buffering = null, ended = true) }
+            } else {
+                _state.update { it.copy(playing = false, buffering = null, error = "Stream ended") }
+            }
+        }
+    }
+
     init {
         check(NativeDiscovery().discover()) { "VLC not found. Install 64-bit VLC 3.x from videolan.org." }
-        factory = MediaPlayerFactory("--no-video-title-show", "--quiet")
-        player = factory.mediaPlayers().newEmbeddedMediaPlayer()
-        player.videoSurface().set(factory.videoSurfaces().newVideoSurface(bufferFormatCallback, renderCallback, true))
-        player.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
-            override fun playing(mediaPlayer: MediaPlayer) {
-                if (runningSince == 0L) runningSince = System.currentTimeMillis()
-                _state.update { it.copy(playing = true, paused = false, buffering = null, error = null) }
-            }
-
-            override fun paused(mediaPlayer: MediaPlayer) {
-                if (runningSince != 0L) {
-                    playedBeforeMs += System.currentTimeMillis() - runningSince
-                    runningSince = 0L
-                }
-                _state.update { it.copy(paused = true) }
-            }
-
-            override fun stopped(mediaPlayer: MediaPlayer) {
-                _state.update { it.copy(playing = false, paused = false, buffering = null) }
-                // While time-shifting, a seek restarts VLC; keep the last frame up instead of flashing black.
-                if (recorder == null) {
-                    _frame.value = null
-                    yuv.clear()
-                }
-            }
-
-            override fun buffering(mediaPlayer: MediaPlayer, newCache: Float) {
-                _state.update { it.copy(buffering = if (newCache >= 100f) null else newCache) }
-            }
-
-            override fun error(mediaPlayer: MediaPlayer) {
-                _state.update { it.copy(playing = false, buffering = null, error = "Stream could not be played") }
-            }
-
-            override fun finished(mediaPlayer: MediaPlayer) {
-                // A buffered input only "ends" because we replaced it (seek) or stopped recording.
-                if (recorder != null) return
-                // A movie or episode reaching its end is normal; a live stream ending is not.
-                if (_state.value.media != null) {
-                    _state.update { it.copy(playing = false, buffering = null, ended = true) }
-                } else {
-                    _state.update { it.copy(playing = false, buffering = null, error = "Stream ended") }
-                }
-            }
-        })
+        factory = newFactory(subtitleStyle)
+        player = newPlayer(factory)
     }
+
+    private fun newFactory(style: SubtitleStyle) =
+        MediaPlayerFactory(*(listOf("--no-video-title-show", "--quiet") + style.vlcArgs()).toTypedArray())
+
+    private fun newPlayer(factory: MediaPlayerFactory): EmbeddedMediaPlayer =
+        factory.mediaPlayers().newEmbeddedMediaPlayer().also {
+            it.videoSurface().set(factory.videoSurfaces().newVideoSurface(bufferFormatCallback, renderCallback, true))
+            it.events().addMediaPlayerEventListener(events)
+        }
 
     // ---- live rewind -------------------------------------------------------------------
 
@@ -256,6 +283,7 @@ class VlcPlayer : VideoPlayer {
 
     /** Points VLC at [offset] in the buffer. Caller holds [sessionLock]. */
     private fun startAt(rec: TimeshiftRecorder, offset: Long) {
+        if (player.status().isPlaying) pendingTracks = player.audio().track() to player.subpictures().track()
         media?.let {
             it.cancel()
             retired.addLast(it)
@@ -383,6 +411,8 @@ class VlcPlayer : VideoPlayer {
         synchronized(sessionLock) {
             endSession()
             this.onDemand = onDemand
+            lastPlay = PlayRequest(url, networkCachingMs, userAgent)
+            pendingTracks = null
             shownLive = 0L
             shownSpan = 0L
             _state.update {
@@ -410,7 +440,10 @@ class VlcPlayer : VideoPlayer {
     }
 
     override fun stop() {
-        synchronized(sessionLock) { endSession() }
+        synchronized(sessionLock) {
+            endSession()
+            lastPlay = null
+        }
         player.controls().stop()
         _state.update { it.copy(timeshift = null) }
     }
@@ -455,6 +488,40 @@ class VlcPlayer : VideoPlayer {
         player.subpictures().setTrack(id)
     }
 
+    override fun setSubtitleStyle(style: SubtitleStyle) {
+        synchronized(sessionLock) {
+            if (style == subtitleStyle) return
+            subtitleStyle = style
+            val s = _state.value
+            val request = lastPlay
+            val wasRunning = player.status().isPlaying || s.paused
+            val tracks = if (wasRunning) player.audio().track() to player.subpictures().track() else null
+            val position = s.media?.positionMs ?: 0L
+            val wall = s.timeshift?.position
+
+            val oldPlayer = player
+            val oldFactory = factory
+            oldPlayer.controls().stop()
+            factory = newFactory(style)
+            player = newPlayer(factory)
+            oldPlayer.release()
+            oldFactory.release()
+            player.audio().setVolume(s.volume)
+            if (s.muted) player.audio().setMute(true)
+
+            if (request == null || s.error != null || s.ended) return
+            pendingTracks = tracks
+            val rec = recorder
+            when {
+                // Recording live: carry on from the same moment in the buffer, which is kept.
+                rec != null && media != null -> startAt(rec, rec.offsetAt(wall ?: (rec.liveWall - cushionMs)))
+                // Still filling the buffer: the session starts VLC itself once it's ready.
+                rec != null -> Unit
+                else -> playDirect(request.url, request.networkCachingMs, request.userAgent, if (onDemand) position else 0L)
+            }
+        }
+    }
+
     override fun release() {
         synchronized(sessionLock) { endSession() }
         scope.cancel()
@@ -466,6 +533,7 @@ class VlcPlayer : VideoPlayer {
 
     private companion object {
         const val TICK_MS = 500L
+        const val TRACK_RESTORE_DELAY_MS = 400L
         const val MIN_CUSHION_MS = 1_500L
         const val LIVE_SLACK_MS = 4_000L
     }

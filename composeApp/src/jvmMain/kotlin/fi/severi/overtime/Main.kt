@@ -67,8 +67,10 @@ private fun loadAppIcon(): Painter? = runCatching {
 
 fun main() = application {
     val appIcon = remember { loadAppIcon() }
-    val playerResult = remember { runCatching { VlcPlayer() } }
-    val vm = remember { playerResult.getOrNull()?.let { AppViewModel(Repository(FileStore()), it) } }
+    val repo = remember { Repository(FileStore()) }
+    // VLC takes the subtitle look at start-up, so it comes from the saved settings.
+    val playerResult = remember { runCatching { VlcPlayer(repo.loadSettings().subtitles) } }
+    val vm = remember { playerResult.getOrNull()?.let { AppViewModel(repo, it) } }
 
     val saved = remember { vm?.settings?.value?.window }
     val windowState = rememberWindowState(

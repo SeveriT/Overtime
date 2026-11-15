@@ -601,6 +601,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         if (after == before) return
         _settings.value = after
         repo.saveSettings(after)
+        if (after.subtitles != before.subtitles) scope.launch { player.setSubtitleStyle(after.subtitles) }
         if (after.userAgent != before.userAgent) repo.setUserAgent(after.userAgent)
         // Recording starts with playback, so turning rewind on or off restarts the current channel.
         if (after.rewindEnabled != before.rewindEnabled || after.rewindMinutes != before.rewindMinutes) {

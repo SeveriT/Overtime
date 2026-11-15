@@ -123,9 +123,46 @@ data class AppSettings(
     val lastChannelId: String? = null,
     val favorites: Set<String> = emptySet(),
     val volume: Int = 100,
+    val subtitles: SubtitleStyle = SubtitleStyle(),
     /** Window bounds (dp) when it was last closed, restored at launch; null until first closed. */
     val window: WindowBounds? = null,
 )
+
+/** How VLC draws plain-text subtitles (SRT and the like); styled ASS subtitles keep their own look. */
+@Serializable
+data class SubtitleStyle(
+    val font: SubtitleFont = SubtitleFont.ARIAL,
+    val size: SubtitleSize = SubtitleSize.NORMAL,
+    /** Text colour as #RRGGBB. */
+    val color: String = "#FFFFFF",
+    val edge: SubtitleEdge = SubtitleEdge.OUTLINE,
+    val bold: Boolean = false,
+)
+
+@Serializable
+enum class SubtitleFont(val label: String, val family: String) {
+    ARIAL("Arial", "Arial"),
+    SEGOE("Segoe UI", "Segoe UI"),
+    VERDANA("Verdana", "Verdana"),
+    TAHOMA("Tahoma", "Tahoma"),
+    GEORGIA("Georgia", "Georgia"),
+}
+
+@Serializable
+enum class SubtitleSize(val label: String, val percent: Int) {
+    SMALL("Small", 80),
+    NORMAL("Normal", 100),
+    LARGE("Large", 125),
+    EXTRA_LARGE("Extra large", 150),
+}
+
+/** What keeps the text readable on bright pictures. */
+@Serializable
+enum class SubtitleEdge(val label: String) {
+    OUTLINE("Outline"),
+    SHADOW("Drop shadow"),
+    BOX("Background box"),
+}
 
 @Serializable
 data class WindowBounds(val x: Int, val y: Int, val width: Int, val height: Int, val maximized: Boolean = false)

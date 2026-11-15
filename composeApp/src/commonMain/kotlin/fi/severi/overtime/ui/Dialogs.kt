@@ -119,7 +119,7 @@ private fun SectionHeader(text: String) {
 
 /** Single-choice filter chips in a scrollable row (for option lists too long for a connected group). */
 @Composable
-private fun <T> ChipChoice(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+internal fun <T> ChipChoice(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { option ->
             FilterChip(
@@ -169,7 +169,7 @@ private fun PosterPreview(
 
 /** Two-line list item with a trailing switch; the whole row toggles. */
 @Composable
-private fun SwitchRow(title: String, supporting: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, supporting: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -189,7 +189,7 @@ private fun SwitchRow(title: String, supporting: String, checked: Boolean, onChe
 }
 
 @Composable
-private fun FieldLabel(text: String) {
+internal fun FieldLabel(text: String) {
     Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
@@ -380,6 +380,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     var groupSort by remember { mutableStateOf(settings.groupSort) }
     var rewindEnabled by remember { mutableStateOf(settings.rewindEnabled) }
     var refreshOnLaunch by remember { mutableStateOf(settings.refreshOnLaunch) }
+    var subtitles by remember { mutableStateOf(settings.subtitles) }
 
     // Colours preview live; closing without saving puts the originals back.
     val originalSidebar = remember { settings.sidebarColor }
@@ -410,6 +411,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                             groupSort = groupSort,
                             rewindEnabled = rewindEnabled,
                             refreshOnLaunch = refreshOnLaunch,
+                            subtitles = subtitles,
                             posterWidth = posterWidth,
                             posterCorners = posterCorners,
                             landscapePosters = landscapePosters,
@@ -540,6 +542,9 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+
+        SectionHeader("Subtitles")
+        SubtitleStyleEditor(subtitles, onChange = { subtitles = it })
 
         SectionHeader("Info")
         Text(

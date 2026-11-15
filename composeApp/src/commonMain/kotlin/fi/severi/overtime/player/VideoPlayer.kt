@@ -2,6 +2,7 @@ package fi.severi.overtime.player
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import fi.severi.overtime.model.SubtitleStyle
 import kotlinx.coroutines.flow.StateFlow
 
 /** Rewind / forward step for the toolbar buttons and Shift+arrow keys. */
@@ -116,6 +117,9 @@ interface VideoPlayer {
 
     /** -1 turns subtitles off. */
     fun selectSubtitleTrack(id: Int) = Unit
+
+    /** Restyles subtitles; whatever is playing carries on from the same spot. */
+    fun setSubtitleStyle(style: SubtitleStyle) = Unit
 }
 
 /** Draws the player's current video frame, letterboxed inside the given bounds. */
