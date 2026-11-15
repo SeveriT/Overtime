@@ -420,14 +420,7 @@ private fun ToolbarButtons(
     media: MediaProgress?,
     onDemand: Boolean,
 ) {
-    val vodContext by vm.vodContext.collectAsState()
     val canSkip = timeshift != null || media != null
-    // The sidebar shows what's playing: channels, a series' episodes, or a movie's details.
-    val sidebarName = when {
-        !onDemand -> "channel list"
-        vodContext?.episodeId != null -> "episode list"
-        else -> "movie details"
-    }
     // Movies seek with plain arrows; live TV uses Shift so the arrows can change channel.
     val skipKey = if (onDemand) "" else "Shift+"
         Row(
@@ -436,7 +429,7 @@ private fun ToolbarButtons(
         ) {
             ToolbarButton(
                 if (sidebarVisible) Icons.AutoMirrored.Filled.MenuOpen else Icons.Default.Menu,
-                if (sidebarVisible) "Hide $sidebarName (S)" else "Show $sidebarName (S)",
+                if (sidebarVisible) "Hide sidebar (S)" else "Show sidebar (S)",
             ) { vm.toggleSidebar() }
             if (!onDemand) ToolbarButton(Icons.Outlined.ViewTimeline, "Programme guide (G)") { vm.openGuide() }
 
