@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.window.WindowPosition
 import fi.severi.overtime.model.WindowBounds
+import java.awt.Dimension
 import java.awt.GraphicsEnvironment
 import java.awt.Rectangle
 import kotlin.math.roundToInt
@@ -50,6 +51,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.jetbrains.skia.Image
 
 private const val GUIDE_STEP_MS = 30 * 60_000L
+
+/** Smallest window, frame included (590 is where the wrapped player controls just fit). */
+private const val MIN_WINDOW_WIDTH = 590
+private const val MIN_WINDOW_HEIGHT = 480
 
 /** Time for the window to leave fullscreen before it is maximised again. */
 private const val FULLSCREEN_EXIT_SETTLE_MS = 150L
@@ -189,6 +194,9 @@ fun main() = application {
             }
         },
     ) {
+        // Narrowest the player controls fit (rewind bar and two button rows), and tall enough for them
+        // and the channel title. In the same scaled units as dp.
+        LaunchedEffect(window) { window.minimumSize = Dimension(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT) }
         // Re-applied after fullscreen changes in case the native window was recreated.
         LaunchedEffect(window, fullscreen, titleBarColor) {
             TitleBar.apply(
