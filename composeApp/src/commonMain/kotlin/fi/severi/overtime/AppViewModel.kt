@@ -184,9 +184,8 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
                 if (!cached.isEmpty) _epg.update { it + (source.id to cached) }
             }
         }
-        _settings.value.lastChannelId?.let { lastId ->
-            _channels.value.values.asSequence().flatten().firstOrNull { it.id == lastId }?.let(::play)
-        }
+        // Resuming the last channel happens in the init block at the end of the class, once every
+        // property play() touches has been initialised.
     }
 
     fun nowNext(channel: Channel, now: Long = clock.value): Pair<Programme?, Programme?> =
@@ -599,6 +598,14 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         saveProgressNow()
         player.release()
         scope.cancel()
+    }
+
+    // Keep this the LAST initialiser in the class: play() uses state declared all through the class,
+    // and Kotlin initialises properties and init blocks top to bottom.
+    init {
+        _settings.value.lastChannelId?.let { lastId ->
+            _channels.value.values.asSequence().flatten().firstOrNull { it.id == lastId }?.let(::play)
+        }
     }
 
     private companion object {
