@@ -150,6 +150,8 @@ enum class SubtitleFont(val label: String, val family: String) {
 
 @Serializable
 enum class SubtitleSize(val label: String, val percent: Int) {
+    TINY("Tiny", 50),
+    EXTRA_SMALL("Extra small", 65),
     SMALL("Small", 80),
     NORMAL("Normal", 100),
     LARGE("Large", 125),

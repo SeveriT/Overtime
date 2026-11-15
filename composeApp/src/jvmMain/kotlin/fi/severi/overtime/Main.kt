@@ -44,10 +44,14 @@ import fi.severi.overtime.ui.OvertimeTheme
 import fi.severi.overtime.ui.contentColorFor
 import fi.severi.overtime.ui.isLightColor
 import fi.severi.overtime.ui.sidebarColorOf
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.jetbrains.skia.Image
 
 private const val GUIDE_STEP_MS = 30 * 60_000L
+
+/** Time for the window to leave fullscreen before it is maximised again. */
+private const val FULLSCREEN_EXIT_SETTLE_MS = 150L
 
 /** True when a usable part of the saved window lies on a connected screen (a monitor may have been unplugged). */
 private fun isOnScreen(b: WindowBounds): Boolean = runCatching {
@@ -81,9 +85,11 @@ fun main() = application {
     )
     // Size and position while floating, so a maximised or fullscreen window still remembers its normal bounds.
     var floating by remember { mutableStateOf(saved?.copy(maximized = false)) }
+    // Briefly Floating while leaving fullscreen for a maximised window; those bounds aren't the normal size.
+    var leavingFullscreen by remember { mutableStateOf(false) }
     LaunchedEffect(windowState) {
         snapshotFlow { Triple(windowState.placement, windowState.position, windowState.size) }.collect { (placement, pos, size) ->
-            if (placement == WindowPlacement.Floating && pos.isSpecified) {
+            if (placement == WindowPlacement.Floating && pos.isSpecified && !leavingFullscreen) {
                 floating = WindowBounds(pos.x.value.roundToInt(), pos.y.value.roundToInt(), size.width.value.roundToInt(), size.height.value.roundToInt())
             }
         }
@@ -99,7 +105,17 @@ fun main() = application {
             if (windowState.placement != WindowPlacement.Fullscreen) beforeFullscreen = windowState.placement
             windowState.placement = WindowPlacement.Fullscreen
         } else if (windowState.placement == WindowPlacement.Fullscreen) {
-            windowState.placement = beforeFullscreen
+            // Compose's Maximized setter doesn't clear fullscreen, so leave it via Floating and maximise after.
+            if (beforeFullscreen == WindowPlacement.Maximized) {
+                leavingFullscreen = true
+                windowState.placement = WindowPlacement.Floating
+                delay(FULLSCREEN_EXIT_SETTLE_MS)
+                windowState.placement = WindowPlacement.Maximized
+                delay(FULLSCREEN_EXIT_SETTLE_MS)
+                leavingFullscreen = false
+            } else {
+                windowState.placement = WindowPlacement.Floating
+            }
         }
     }
 

@@ -48,7 +48,7 @@ internal fun SubtitleStyleEditor(style: SubtitleStyle, onChange: (SubtitleStyle)
     FieldLabel("Font")
     ChipChoice(SubtitleFont.entries, style.font, { it.label }) { onChange(style.copy(font = it)) }
     FieldLabel("Size")
-    ConnectedChoiceGroup(SubtitleSize.entries, style.size, { it.label }, { onChange(style.copy(size = it)) })
+    ChipChoice(SubtitleSize.entries, style.size, { it.label }) { onChange(style.copy(size = it)) }
     FieldLabel("Edge")
     ConnectedChoiceGroup(SubtitleEdge.entries, style.edge, { it.label }, { onChange(style.copy(edge = it)) })
     FieldLabel("Text colour")
