@@ -5,38 +5,33 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 ## Features
 
 ### Live TV
-- M3U / M3U8 playlists from a URL or a local file, and Xtream Codes logins
-- Channel groups (playlist order or A–Z), search and favourites; the sidebar can be resized or hidden
-- Channels and guides refresh in the background when the app opens (can be turned off)
-- Resumes the last channel on start
-- **Live rewind**: pause and rewind up to 5 minutes, with a seek bar and a Go live button
-- Channels, rewinds and Go live start on a keyframe, so the picture appears together with the sound
+- M3U / M3U8 playlists (URL or local file) and Xtream Codes logins
+- Channel groups, search and favourites
+- Live rewind: pause and rewind up to 5 minutes
+- Automatic channel and guide refresh
 
 ### Programme guide
-- XMLTV guides (plain or gzip), several per source; M3U header guides (`x-tvg-url`, `url-tvg`) are picked up automatically
-- Now / next and progress in the channel list
-- Full EPG grid (G) with a details sheet; move through time with ← → (Shift for 3 hours)
+- XMLTV guides, including guides named in M3U playlists
+- Now / next in the channel list
+- Full programme guide grid
 
 ### Movies & series (Xtream)
-- Home rows per category, poster grid and search
-- Continue watching, resume where you left off, and Next up for series
-- Optional rated poster artwork from a configurable template, plus poster card size and corner settings
-- Now playing sidebar with episode list (hidden when a title starts), and a mini player while browsing
-- Stop returns to Movies & series
+- Browse by category, search and poster grid
+- Continue watching, resume and Next up for series
+- Rated poster artwork
+- Mini player while browsing
 
 ### Player
-- GPU colour conversion, so 4K HEVC at 50 fps plays without dropped frames
-- Audio and subtitle track picker (B / V)
-- Subtitle style: font, size, outline / shadow / box, colour and bold, with a live preview
+- Smooth 4K playback
+- Audio and subtitle track selection
+- Subtitle style: font, size, edge, colour and bold
 - Picture settings: brightness, contrast and saturation
-- Stream info panel: resolution, frame rate, codec, bitrate, dropped frames and audio, plus a button to copy the stream URL
-- Fullscreen, Windows-style volume popup, and auto-hiding controls
-- Remembers the window size and position
+- Stream info: resolution, frame rate, codec, bitrate and more, with copy stream URL
+- Fullscreen and keyboard shortcuts
 
 ### Look
 - Material 3 Expressive design
-- Accent, sidebar / title bar and subtitle colours from presets or a full RGB picker (saturation/brightness, hue, hex)
-- Wide two-column Settings on desktop screens
+- Custom accent, sidebar and title bar colours
 
 ## Requirements
 
