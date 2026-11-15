@@ -121,7 +121,7 @@ data class PosterStyle(
 }
 
 /** Rated artwork when the title has an ID and it's enabled, else the provider's own image. */
-private fun artFor(style: PosterStyle, kind: LibraryKind, tmdbId: String?, imdbId: String?, landscape: Boolean, fallback: String?): Pair<String?, Boolean> {
+internal fun artFor(style: PosterStyle, kind: LibraryKind, tmdbId: String?, imdbId: String?, landscape: Boolean, fallback: String?): Pair<String?, Boolean> {
     val rated = if (style.rated) PosterArt.url(style.template, kind, tmdbId, imdbId, landscape) else null
     return if (rated != null) rated to true else fallback to false
 }

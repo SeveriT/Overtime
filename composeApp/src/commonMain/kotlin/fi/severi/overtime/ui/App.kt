@@ -54,6 +54,7 @@ fun App(vm: AppViewModel) {
         val sidebarVisible by vm.sidebarVisible.collectAsState()
         val guideVisible by vm.guideVisible.collectAsState()
         val libraryVisible by vm.library.visible.collectAsState()
+        val vodPlaying = vm.currentVod.collectAsState().value != null
         var showSources by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 
@@ -77,12 +78,21 @@ fun App(vm: AppViewModel) {
                     Row(Modifier.fillMaxSize()) {
                         if (sidebarVisible) {
                             SidebarTheme(sidebarColorOf(settings.sidebarColor)) {
-                                ChannelSidebar(
-                                    vm = vm,
-                                    onOpenSettings = { showSettings = true },
-                                    onAddSource = { showSources = true },
-                                    modifier = Modifier.width(shownDp.dp).fillMaxHeight(),
-                                )
+                                // A movie or episode replaces the channel list with its own panel.
+                                if (vodPlaying) {
+                                    VodSidebar(
+                                        vm = vm,
+                                        onOpenSettings = { showSettings = true },
+                                        modifier = Modifier.width(shownDp.dp).fillMaxHeight(),
+                                    )
+                                } else {
+                                    ChannelSidebar(
+                                        vm = vm,
+                                        onOpenSettings = { showSettings = true },
+                                        onAddSource = { showSources = true },
+                                        modifier = Modifier.width(shownDp.dp).fillMaxHeight(),
+                                    )
+                                }
                                 PaneDragHandle(
                                     onDrag = { deltaPx ->
                                         // Build on the live value: several deltas can arrive between frames.

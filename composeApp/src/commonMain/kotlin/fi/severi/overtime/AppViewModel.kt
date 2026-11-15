@@ -198,6 +198,31 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     // ---- movies & series ----------------------------------------------------------
 
+    /** What the on-demand title is, for the Now playing sidebar (details load in the background if needed). */
+    data class VodContext(
+        val sourceId: String,
+        val item: LibraryItem,
+        val movie: MovieDetails? = null,
+        val series: SeriesDetails? = null,
+        val episodeId: String? = null,
+        val season: Int? = null,
+    )
+
+    val vodContext = MutableStateFlow<VodContext?>(null)
+
+    /** Fills in details the context lacks (e.g. after resuming from Continue watching). */
+    private fun loadVodDetails(context: VodContext) {
+        if (context.movie != null || context.series != null) return
+        val source = _sources.value.firstOrNull { it.id == context.sourceId } ?: return
+        scope.launch {
+            val updated = runCatching {
+                if (context.item.kind == LibraryKind.MOVIES) context.copy(movie = repo.movieDetails(source, context.item))
+                else context.copy(series = repo.seriesDetails(source, context.item))
+            }.getOrNull() ?: return@launch
+            if (vodContext.value?.item?.id == context.item.id) vodContext.value = updated
+        }
+    }
+
     /** Opens Movies & series. A live channel stops; a movie or episode keeps playing (shown as a mini player). */
     fun openLibrary() {
         closeGuide()
@@ -226,6 +251,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         player.stop()
         currentChannel.value = null
         currentVod.value = null
+        vodContext.value = null
         updateSettings { it.copy(lastChannelId = null) }
     }
 
@@ -247,6 +273,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
             imdbId = item.imdbId ?: details?.imdbId,
         )
         startVod(repo.movieUrl(source, item), VodPlayback(item.name, item.year, item.poster), entry, next = null, fromStart = fromStart)
+        vodContext.value = VodContext(source.id, item, movie = details).also(::loadVodDetails)
     }
 
     fun playEpisode(series: LibraryItem, details: SeriesDetails, season: Season, episode: Episode) {
@@ -254,22 +281,32 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         val entry = episodeEntry(source.id, series, details, season, episode)
         val next = nextEpisodeAfter(details, season, episode)?.let { (s, e) -> episodeEntry(source.id, series, details, s, e) }
         startVod(repo.episodeUrl(source, episode), episodePlayback(entry), entry, next)
+        vodContext.value = VodContext(source.id, series, series = details, episodeId = episode.id, season = season.number)
     }
 
     /** Plays a Continue watching card: resumes where it stopped, or starts a queued next episode. */
     fun resume(entry: WatchProgress) {
         val source = _sources.value.firstOrNull { it.id == entry.sourceId } ?: return
         if (entry.episodeId == null) {
-            val item = LibraryItem(entry.itemId, LibraryKind.MOVIES, entry.title, entry.poster, null, null, "", entry.extension)
+            val item = LibraryItem(
+                entry.itemId, LibraryKind.MOVIES, entry.title, entry.poster, null, null, "", entry.extension,
+                tmdbId = entry.tmdbId, imdbId = entry.imdbId, backdrop = entry.backdrop,
+            )
             startVod(repo.movieUrl(source, item), VodPlayback(entry.title, null, entry.poster), entry.copy(nextUp = false), next = null)
+            vodContext.value = VodContext(source.id, item).also(::loadVodDetails)
             return
         }
         val episode = Episode(entry.episodeId, entry.episode ?: 0, entry.episodeTitle.orEmpty(), entry.extension, null, null, null)
         startVod(repo.episodeUrl(source, episode), episodePlayback(entry), entry.copy(nextUp = false), next = null)
-        // Find what comes after it in the background, so finishing this one queues the next.
-        val series = LibraryItem(entry.itemId, LibraryKind.SERIES, entry.title, entry.poster, null, null, "", null)
+        val series = LibraryItem(
+            entry.itemId, LibraryKind.SERIES, entry.title, entry.poster, null, null, "", null,
+            tmdbId = entry.tmdbId, imdbId = entry.imdbId, backdrop = entry.backdrop,
+        )
+        vodContext.value = VodContext(source.id, series, episodeId = entry.episodeId, season = entry.season)
+        // Load the episode list for the sidebar, and find what comes after this one so finishing it queues the next.
         scope.launch {
             val details = runCatching { repo.seriesDetails(source, series) }.getOrNull() ?: return@launch
+            vodContext.value?.takeIf { it.episodeId == entry.episodeId }?.let { vodContext.value = it.copy(series = details) }
             val season = details.seasons.firstOrNull { it.number == entry.season } ?: return@launch
             val current = season.episodes.firstOrNull { it.id == entry.episodeId } ?: return@launch
             val next = nextEpisodeAfter(details, season, current) ?: return@launch
@@ -393,6 +430,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     fun play(channel: Channel) {
         saveProgressNow()
         currentVod.value = null
+        vodContext.value = null
         currentChannel.value = channel
         // A channel picked from a search outside the current group makes its own group the one Left/Right steps through.
         if (channel.sourceId == selectedSourceId.value && channelsIn(selectedGroup.value).none { it.id == channel.id }) {
