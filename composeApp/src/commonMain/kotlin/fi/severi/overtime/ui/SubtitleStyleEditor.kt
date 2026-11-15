@@ -35,7 +35,7 @@ internal expect fun systemFontFamily(name: String): FontFamily
 
 private val SubtitleColors = listOf(
     ColorPreset("White", Color(0xFFFFFFFF)),
-    ColorPreset("Yellow", Color(0xFFFFE84D)),
+    ColorPreset("Yellow", Color(0xFFFFDE00)),
     ColorPreset("Light grey", Color(0xFFD0D0D0)),
     ColorPreset("Cyan", Color(0xFF7FE7FF)),
     ColorPreset("Green", Color(0xFFA8F0A0)),

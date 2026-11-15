@@ -1,5 +1,6 @@
 package fi.severi.overtime.data
 
+import fi.severi.overtime.model.AppSettings
 import fi.severi.overtime.model.PosterWidth
 import java.io.File
 import java.nio.file.Files
@@ -34,7 +35,7 @@ class SettingsCompatTest {
     @Test
     fun unknownValueFallsBackWithoutLosingTheRest() {
         val settings = load("""{"posterWidth": "GIGANTIC", "volume": 42, "accentColor": "#FFB1C8"}""")
-        assertEquals(PosterWidth.MEDIUM, settings.posterWidth)
+        assertEquals(AppSettings().posterWidth, settings.posterWidth)
         assertEquals(42, settings.volume)
         assertEquals("#FFB1C8", settings.accentColor)
     }

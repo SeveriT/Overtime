@@ -114,10 +114,10 @@ data class AppSettings(
     /** Reload every source's channels and guide in the background when the app opens. */
     val refreshOnLaunch: Boolean = true,
     // Library poster cards
-    val posterWidth: PosterWidth = PosterWidth.MEDIUM,
+    val posterWidth: PosterWidth = PosterWidth.LARGE,
     val posterCorners: PosterCorners = PosterCorners.CLASSIC,
-    val landscapePosters: Boolean = false,
-    val hidePosterLabels: Boolean = false,
+    val landscapePosters: Boolean = true,
+    val hidePosterLabels: Boolean = true,
     /** Rated artwork from [posterTemplate] when a title has a TMDB or IMDb ID. */
     val ratedPosters: Boolean = true,
     val posterTemplate: String = DEFAULT_POSTER_TEMPLATE,
@@ -143,10 +143,10 @@ data class PictureAdjust(val brightness: Float = 0f, val contrast: Float = 1f, v
 /** How VLC draws plain-text subtitles (SRT and the like); styled ASS subtitles keep their own look. */
 @Serializable
 data class SubtitleStyle(
-    val font: SubtitleFont = SubtitleFont.ARIAL,
-    val size: SubtitleSize = SubtitleSize.NORMAL,
+    val font: SubtitleFont = SubtitleFont.SEGOE,
+    val size: SubtitleSize = SubtitleSize.EXTRA_SMALL,
     /** Text colour as #RRGGBB. */
-    val color: String = "#FFFFFF",
+    val color: String = "#FFDE00",
     val edge: SubtitleEdge = SubtitleEdge.OUTLINE,
     val bold: Boolean = false,
 )
