@@ -38,6 +38,7 @@ import fi.severi.overtime.data.FileStore
 import fi.severi.overtime.data.Repository
 import fi.severi.overtime.player.VlcPlayer
 import fi.severi.overtime.ui.App
+import fi.severi.overtime.ui.ShortcutGuard
 import fi.severi.overtime.model.AppSettings
 import fi.severi.overtime.player.REWIND_STEP_MS
 import fi.severi.overtime.ui.OvertimeTheme
@@ -133,6 +134,8 @@ fun main() = application {
         icon = appIcon,
         onKeyEvent = { event ->
             if (event.type != KeyEventType.KeyDown || vm == null) return@Window false
+            // Settings or Sources open, or typing in a search field: the keys belong to that.
+            if (ShortcutGuard.active) return@Window false
             // The library is a browsing page: only closing keys and playback basics apply.
             if (vm.library.visible.value) {
                 return@Window when (event.key) {

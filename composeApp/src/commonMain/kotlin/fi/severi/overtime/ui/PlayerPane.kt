@@ -73,6 +73,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -124,6 +125,7 @@ fun PlayerPane(
     val hasContent = channel != null || vod != null
 
     var lastActivity by remember { mutableStateOf(nowMillis()) }
+    val focusManager = LocalFocusManager.current
     var overlayVisible by remember { mutableStateOf(true) }
     // A toolbar menu is a popup: the mouse over it doesn't count as activity here, so hold the controls
     // up while one is open (hiding them would close the menu mid-drag), then count down from its closing.
@@ -167,7 +169,11 @@ fun PlayerPane(
             }
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onTap = { lastActivity = nowMillis() },
+                    onTap = {
+                        lastActivity = nowMillis()
+                        // Clicking the picture leaves a search field, so shortcuts work again.
+                        focusManager.clearFocus()
+                    },
                     onDoubleTap = { vm.toggleFullscreen() },
                 )
             },

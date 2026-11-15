@@ -83,6 +83,8 @@ private fun DialogFrame(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = !wide)) {
+        // Typing in a dialog must not trigger player shortcuts.
+        BlockShortcuts()
         Surface(
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,

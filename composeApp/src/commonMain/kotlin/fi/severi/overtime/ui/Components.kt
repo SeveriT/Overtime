@@ -128,7 +128,7 @@ fun PillSearchField(value: String, onValueChange: (String) -> Unit, placeholder:
     TextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier,
+        modifier = modifier.typingBlocksShortcuts(),
         placeholder = { Text(placeholder) },
         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
         trailingIcon = if (value.isNotEmpty()) {
