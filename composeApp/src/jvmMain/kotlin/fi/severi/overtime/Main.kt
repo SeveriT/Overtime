@@ -8,6 +8,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.isSpecified
+import androidx.compose.ui.window.WindowPosition
+import fi.severi.overtime.model.WindowBounds
+import java.awt.GraphicsEnvironment
+import java.awt.Rectangle
+import kotlin.math.roundToInt
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +49,16 @@ import org.jetbrains.skia.Image
 
 private const val GUIDE_STEP_MS = 30 * 60_000L
 
+/** True when a usable part of the saved window lies on a connected screen (a monitor may have been unplugged). */
+private fun isOnScreen(b: WindowBounds): Boolean = runCatching {
+    // AWT screen bounds use the same scaled units as Compose's dp window position.
+    val rect = Rectangle(b.x, b.y, b.width, b.height)
+    GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.any { device ->
+        val visible = device.defaultConfiguration.bounds.intersection(rect)
+        visible.width >= 200 && visible.height >= 100
+    }
+}.getOrDefault(false)
+
 /** Window and taskbar icon; the exe and installer use composeApp/icons/overtime.ico. */
 private fun loadAppIcon(): Painter? = runCatching {
     val bytes = object {}.javaClass.getResourceAsStream("/overtime_icon.png")!!.use { it.readBytes() }
@@ -50,17 +70,43 @@ fun main() = application {
     val playerResult = remember { runCatching { VlcPlayer() } }
     val vm = remember { playerResult.getOrNull()?.let { AppViewModel(Repository(FileStore()), it) } }
 
-    val windowState = rememberWindowState(width = 1280.dp, height = 800.dp)
+    val saved = remember { vm?.settings?.value?.window }
+    val windowState = rememberWindowState(
+        placement = if (saved?.maximized == true) WindowPlacement.Maximized else WindowPlacement.Floating,
+        position = saved?.takeIf(::isOnScreen)?.let { WindowPosition(it.x.dp, it.y.dp) }
+            ?: WindowPosition.PlatformDefault,
+        size = DpSize((saved?.width ?: 1280).dp, (saved?.height ?: 800).dp),
+    )
+    // Size and position while floating, so a maximised or fullscreen window still remembers its normal bounds.
+    var floating by remember { mutableStateOf(saved?.copy(maximized = false)) }
+    LaunchedEffect(windowState) {
+        snapshotFlow { Triple(windowState.placement, windowState.position, windowState.size) }.collect { (placement, pos, size) ->
+            if (placement == WindowPlacement.Floating && pos.isSpecified) {
+                floating = WindowBounds(pos.x.value.roundToInt(), pos.y.value.roundToInt(), size.width.value.roundToInt(), size.height.value.roundToInt())
+            }
+        }
+    }
     val fullscreen by (vm?.fullscreen ?: MutableStateFlow(false)).collectAsState()
     val settingsFlow = remember { vm?.settings ?: MutableStateFlow(AppSettings()) }
     val settings by settingsFlow.collectAsState()
     val titleBarColor = sidebarColorOf(settings.sidebarColor)
+    // Leaving fullscreen returns to whatever the window was before (maximised or floating).
+    var beforeFullscreen by remember { mutableStateOf(windowState.placement) }
     LaunchedEffect(fullscreen) {
-        windowState.placement = if (fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating
+        if (fullscreen) {
+            if (windowState.placement != WindowPlacement.Fullscreen) beforeFullscreen = windowState.placement
+            windowState.placement = WindowPlacement.Fullscreen
+        } else if (windowState.placement == WindowPlacement.Fullscreen) {
+            windowState.placement = beforeFullscreen
+        }
     }
 
     Window(
         onCloseRequest = {
+            if (vm != null) {
+                val placement = if (windowState.placement == WindowPlacement.Fullscreen) beforeFullscreen else windowState.placement
+                floating?.let { bounds -> vm.updateSettings { it.copy(window = bounds.copy(maximized = placement == WindowPlacement.Maximized)) } }
+            }
             vm?.shutdown()
             exitApplication()
         },

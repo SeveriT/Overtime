@@ -121,7 +121,12 @@ data class AppSettings(
     val lastChannelId: String? = null,
     val favorites: Set<String> = emptySet(),
     val volume: Int = 100,
+    /** Window bounds (dp) when it was last closed, restored at launch; null until first closed. */
+    val window: WindowBounds? = null,
 )
+
+@Serializable
+data class WindowBounds(val x: Int, val y: Int, val width: Int, val height: Int, val maximized: Boolean = false)
 
 @Serializable
 enum class PosterWidth(val label: String, val dp: Int) {
