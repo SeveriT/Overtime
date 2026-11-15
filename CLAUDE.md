@@ -12,7 +12,16 @@ Compose Multiplatform UI, libVLC playback through vlcj 4.x (VLC 3.x must be inst
 
 ## Conventions
 
-- Material 3, dark theme only (`ui/Theme.kt`). Dialogs go through `DialogFrame` in `ui/Dialogs.kt`.
+- Material 3 Expressive (material3 alpha, `MaterialExpressiveTheme` + `MotionScheme.expressive()`), dark only.
+  Full colour scheme in `ui/Theme.kt`; accent and sidebar colours are user settings derived there.
+  Expressive opt-ins are enabled for all source sets in `composeApp/build.gradle.kts`.
+- Component conventions: buttons and icon buttons pass `shapes = ...Defaults.shapes()` (press morph);
+  single-choice selectors use `ConnectedChoiceGroup`; the sidebar is a navigation drawer
+  (`NavigationDrawerItem` pills, `surfaceContainerLow`); player controls live in the floating pill
+  toolbar; both volume bars use `VolumeSlider`. Shared pieces are in `ui/Components.kt`.
+- Dialogs go through `DialogFrame` in `ui/Dialogs.kt` (scrollable body, fixed action row).
+- UI review without VLC: `OVERTIME_SCREENSHOTS=<dir> .\gradlew :composeApp:jvmTest` renders the main
+  screens to PNGs with demo data (`ScreenshotTest`).
 - State lives in `AppViewModel` as `StateFlow`s; composables only `collectAsState()`.
 - Persisted JSON uses kotlinx.serialization with `ignoreUnknownKeys` so old files keep loading.
 - Build: `.\gradlew :composeApp:run`. Package: `.\gradlew :composeApp:packageMsi`.

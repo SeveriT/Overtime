@@ -138,7 +138,7 @@ class VlcPlayer : VideoPlayer {
 
 @Composable
 actual fun VideoSurface(player: VideoPlayer, modifier: Modifier) {
-    val vlc = player as VlcPlayer
+    val vlc = player as? VlcPlayer ?: return
     val frame by vlc.frame.collectAsState()
     Canvas(modifier) {
         val image = frame ?: return@Canvas

@@ -15,6 +15,10 @@ kotlin {
     }
 
     sourceSets {
+        all {
+            languageSettings.optIn("androidx.compose.material3.ExperimentalMaterial3Api")
+            languageSettings.optIn("androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")
+        }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)

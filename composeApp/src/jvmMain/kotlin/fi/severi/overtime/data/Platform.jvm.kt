@@ -12,8 +12,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 actual class FileStore actual constructor() {
-    actual val directory: String =
-        (System.getenv("APPDATA") ?: System.getProperty("user.home")) + File.separator + "Overtime"
+    /** `-Dovertime.dataDir=...` redirects storage (used by tests so they never touch real settings). */
+    actual val directory: String = System.getProperty("overtime.dataDir")
+        ?: ((System.getenv("APPDATA") ?: System.getProperty("user.home")) + File.separator + "Overtime")
 
     private val dir = File(directory).apply { mkdirs() }
 

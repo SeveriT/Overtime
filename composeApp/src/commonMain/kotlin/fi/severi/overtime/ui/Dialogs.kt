@@ -1,11 +1,8 @@
 package fi.severi.overtime.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,30 +12,27 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PlainTooltip
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TooltipAnchorPosition
-import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.TooltipDefaults
-import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -47,8 +41,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,20 +51,57 @@ import fi.severi.overtime.model.GroupSort
 import fi.severi.overtime.model.Source
 import fi.severi.overtime.model.SourceType
 
+/** M3 dialog: extra-large corners, high container tone, scrollable body with fixed action row. */
 @Composable
-private fun DialogFrame(title: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+private fun DialogFrame(
+    title: String,
+    onDismiss: () -> Unit,
+    actions: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(20.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.width(560.dp),
+            modifier = Modifier.width(600.dp),
         ) {
-            Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge)
-                content()
+            Column(Modifier.padding(top = 24.dp, bottom = 20.dp)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                )
+                Column(
+                    Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    content = content,
+                )
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) { actions() }
             }
         }
     }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmallEmphasized,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+@Composable
+private fun FieldLabel(text: String) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -89,43 +118,85 @@ fun SourcesDialog(vm: AppViewModel, onDismiss: () -> Unit) {
 
     val canAdd = url.isNotBlank() && (type != SourceType.XTREAM || (username.isNotBlank() && password.isNotBlank()))
 
-    DialogFrame("Sources", onDismiss) {
+    fun add() {
+        vm.addSource(
+            Source(
+                id = nowMillis().toString(36),
+                name = name.trim().ifEmpty { defaultName(type, url) },
+                type = type,
+                url = url.trim(),
+                username = username.trim(),
+                password = password.trim(),
+                epgUrl = epgUrl.trim(),
+            ),
+        )
+        name = ""; url = ""; username = ""; password = ""; epgUrl = ""
+    }
+
+    DialogFrame(
+        title = "Sources",
+        onDismiss = onDismiss,
+        actions = {
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Close") }
+            Button(onClick = ::add, enabled = canAdd, shapes = ButtonDefaults.shapes()) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                Text("Add source")
+            }
+        },
+    ) {
         if (sources.isNotEmpty()) {
-            LazyColumn(Modifier.heightIn(max = 220.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyColumn(Modifier.heightIn(max = 240.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(sources, key = { it.id }) { source ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(source.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                "${source.type.label} · ${source.url}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        IconButton(onClick = { vm.refreshSource(source.id) }, enabled = busy == null) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                        }
-                        IconButton(onClick = { vm.removeSource(source.id) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error)
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(source.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    "${source.type.label} · ${source.url}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            WithTooltip("Refresh") {
+                                FilledTonalIconButton(
+                                    onClick = { vm.refreshSource(source.id) },
+                                    enabled = busy == null,
+                                    shapes = IconButtonDefaults.shapes(),
+                                ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh") }
+                            }
+                            WithTooltip("Remove") {
+                                OutlinedIconButton(
+                                    onClick = { vm.removeSource(source.id) },
+                                    shapes = IconButtonDefaults.shapes(),
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
                         }
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 4.dp))
         }
 
-        Text("Add source", style = MaterialTheme.typography.titleMedium)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            SourceType.entries.forEachIndexed { index, option ->
-                SegmentedButton(
-                    selected = type == option,
-                    onClick = { type = option },
-                    shape = SegmentedButtonDefaults.itemShape(index, SourceType.entries.size),
-                ) { Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            }
-        }
+        SectionHeader("Add source")
+        ConnectedChoiceGroup(
+            options = SourceType.entries,
+            selected = type,
+            label = { it.label },
+            onSelect = { type = it },
+        )
         OutlinedTextField(name, { name = it }, label = { Text("Name (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(
             url, { url = it },
@@ -155,28 +226,6 @@ fun SourcesDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         } else {
             OutlinedTextField(epgUrl, { epgUrl = it }, label = { Text("XMLTV guide URL (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onDismiss) { Text("Close") }
-            Spacer(Modifier.width(8.dp))
-            Button(
-                enabled = canAdd,
-                onClick = {
-                    val id = nowMillis().toString(36)
-                    vm.addSource(
-                        Source(
-                            id = id,
-                            name = name.trim().ifEmpty { defaultName(type, url) },
-                            type = type,
-                            url = url.trim(),
-                            username = username.trim(),
-                            password = password.trim(),
-                            epgUrl = epgUrl.trim(),
-                        ),
-                    )
-                    name = ""; url = ""; username = ""; password = ""; epgUrl = ""
-                },
-            ) { Text("Add") }
-        }
     }
 }
 
@@ -193,76 +242,80 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     var caching by remember { mutableStateOf(settings.networkCachingMs.toString()) }
     var groupSort by remember { mutableStateOf(settings.groupSort) }
 
-    // The colour previews live; closing without saving puts the original back.
-    val originalColor = remember { settings.sidebarColor }
-    var colorText by remember { mutableStateOf(sidebarColorOf(settings.sidebarColor).toHex()) }
-    fun previewColor(color: Color) {
-        vm.updateSettings { it.copy(sidebarColor = if (color == OvertimeColors.surface) null else color.toHex()) }
-    }
+    // Colours preview live; closing without saving puts the originals back.
+    val originalSidebar = remember { settings.sidebarColor }
+    val originalAccent = remember { settings.accentColor }
     val cancel = {
-        vm.updateSettings { it.copy(sidebarColor = originalColor) }
+        vm.updateSettings { it.copy(sidebarColor = originalSidebar, accentColor = originalAccent) }
         onDismiss()
     }
 
-    DialogFrame("Settings", cancel) {
+    DialogFrame(
+        title = "Settings",
+        onDismiss = cancel,
+        actions = {
+            TextButton(onClick = cancel, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
+            Button(
+                shapes = ButtonDefaults.shapes(),
+                onClick = {
+                    vm.updateSettings {
+                        it.copy(
+                            userAgent = userAgent.trim().ifEmpty { it.userAgent },
+                            networkCachingMs = caching.toIntOrNull()?.coerceIn(0, 60_000) ?: it.networkCachingMs,
+                            groupSort = groupSort,
+                        )
+                    }
+                    onDismiss()
+                },
+            ) { Text("Save") }
+        },
+    ) {
+        SectionHeader("Sources")
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Sources", style = MaterialTheme.typography.labelLarge)
-                Text(
-                    when (sources.size) {
-                        0 -> "No playlists or logins added yet"
-                        1 -> sources.first().name
-                        else -> "${sources.size} sources: ${sources.joinToString { it.name }}"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text(
+                when (sources.size) {
+                    0 -> "No playlists or logins added yet"
+                    1 -> sources.first().name
+                    else -> "${sources.size} sources: ${sources.joinToString { it.name }}"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
             Spacer(Modifier.width(12.dp))
-            OutlinedButton(onClick = onOpenSources) { Text("Manage sources") }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Text("Channel group order", style = MaterialTheme.typography.labelLarge)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            GroupSort.entries.forEachIndexed { index, option ->
-                SegmentedButton(
-                    selected = groupSort == option,
-                    onClick = { groupSort = option },
-                    shape = SegmentedButtonDefaults.itemShape(index, GroupSort.entries.size),
-                ) { Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            FilledTonalButton(onClick = onOpenSources, shapes = ButtonDefaults.shapes()) {
+                Icon(Icons.AutoMirrored.Filled.ViewList, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                Text("Manage sources")
             }
         }
 
-        Text("Sidebar and title bar colour", style = MaterialTheme.typography.labelLarge)
-        val currentColor = sidebarColorOf(settings.sidebarColor)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            SidebarPresets.forEach { preset ->
-                ColorSwatch(
-                    preset = preset,
-                    selected = preset.color == currentColor,
-                    onClick = {
-                        colorText = preset.color.toHex()
-                        previewColor(preset.color)
-                    },
-                )
-            }
-        }
-        OutlinedTextField(
-            value = colorText,
-            onValueChange = { text ->
-                colorText = text.filter { it == '#' || it.lowercaseChar() in "0123456789abcdef" }.take(7)
-                parseHexColor(colorText)?.let(::previewColor)
-            },
-            label = { Text("Custom colour") },
-            placeholder = { Text("#RRGGBB") },
-            isError = parseHexColor(colorText) == null,
-            supportingText = { Text("Light colours switch the sidebar text to dark.") },
-            singleLine = true,
-            modifier = Modifier.width(220.dp),
+        SectionHeader("Appearance")
+        FieldLabel("Accent colour")
+        ColorPicker(
+            presets = AccentPresets,
+            current = accentColorOf(settings.accentColor),
+            onPick = { color -> vm.updateSettings { it.copy(accentColor = if (color == DefaultAccent) null else color.toHex()) } },
+            supportingText = "Buttons, sliders, selections and progress.",
+        )
+        FieldLabel("Sidebar and title bar colour")
+        ColorPicker(
+            presets = SidebarPresets,
+            current = sidebarColorOf(settings.sidebarColor),
+            onPick = { color -> vm.updateSettings { it.copy(sidebarColor = if (color == DefaultSidebarColor) null else color.toHex()) } },
+            supportingText = "Light colours switch the sidebar text to dark.",
+        )
+        FieldLabel("Channel group order")
+        ConnectedChoiceGroup(
+            options = GroupSort.entries,
+            selected = groupSort,
+            label = { it.label },
+            onSelect = { groupSort = it },
         )
 
+        SectionHeader("Playback")
         OutlinedTextField(userAgent, { userAgent = it }, label = { Text("HTTP user agent") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(
             caching, { caching = it.filter(Char::isDigit) },
@@ -271,52 +324,17 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+
+        SectionHeader("Info")
+        Text(
+            "Shortcuts: ← → or Page Up/Down change channel · ↑ ↓ volume · Space pause · M mute · S channel list · F or F11 fullscreen · Esc back / leave fullscreen",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Text(
             "Data folder: ${vm.dataDirectory}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            "Shortcuts: ← → or Page Up/Down change channel · ↑ ↓ volume · Space pause · M mute · S channel list · F or F11 fullscreen · Esc leave fullscreen",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = cancel) { Text("Cancel") }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = {
-                vm.updateSettings {
-                    it.copy(
-                        userAgent = userAgent.trim().ifEmpty { it.userAgent },
-                        networkCachingMs = caching.toIntOrNull()?.coerceIn(0, 60_000) ?: it.networkCachingMs,
-                        groupSort = groupSort,
-                    )
-                }
-                onDismiss()
-            }) { Text("Save") }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ColorSwatch(preset: ColorPreset, selected: Boolean, onClick: () -> Unit) {
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-        tooltip = { PlainTooltip { Text(preset.name) } },
-        state = rememberTooltipState(),
-    ) {
-        Box(
-            Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(preset.color)
-                .border(
-                    width = if (selected) 3.dp else 1.dp,
-                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                    shape = CircleShape,
-                )
-                .clickable(onClick = onClick),
         )
     }
 }

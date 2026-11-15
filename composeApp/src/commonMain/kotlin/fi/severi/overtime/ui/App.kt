@@ -17,13 +17,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import fi.severi.overtime.AppViewModel
 
+/** M3 standard navigation drawer width. */
+private val SidebarWidth = 360.dp
+
 @Composable
 fun App(vm: AppViewModel) {
-    OvertimeTheme {
+    val settings by vm.settings.collectAsState()
+    OvertimeTheme(accent = accentColorOf(settings.accentColor)) {
         val sources by vm.sources.collectAsState()
         val fullscreen by vm.fullscreen.collectAsState()
         val sidebarVisible by vm.sidebarVisible.collectAsState()
-        val settings by vm.settings.collectAsState()
         var showSources by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 
@@ -37,7 +40,8 @@ fun App(vm: AppViewModel) {
                         ChannelSidebar(
                             vm = vm,
                             onOpenSettings = { showSettings = true },
-                            modifier = Modifier.width(340.dp).fillMaxHeight(),
+                            onAddSource = { showSources = true },
+                            modifier = Modifier.width(SidebarWidth).fillMaxHeight(),
                         )
                     }
                 }
