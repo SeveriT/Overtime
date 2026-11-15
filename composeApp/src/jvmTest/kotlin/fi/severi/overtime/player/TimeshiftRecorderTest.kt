@@ -89,6 +89,50 @@ class TimeshiftRecorderTest {
     }
 
     @Test
+    fun waitsForAKeyframeAndStartsOnIt() {
+        val gates = List(3) { java.util.concurrent.CountDownLatch(1) }
+        val slice = { TsPackets.pes(0x41) } // ordinary H.264 slice
+        server.createContext("/video.ts") { ex ->
+            ex.sendResponseHeaders(200, 0)
+            val out = ex.responseBody
+            // 0-4: tables and slices. 5-6 after 2 s. 7-8 tables again, 9 the keyframe, 10 a slice; 11 after another 1.5 s.
+            listOf(TsPackets.pat(), TsPackets.pmt(0x1B), slice(), slice(), slice()).forEach(out::write); out.flush()
+            gates[0].await()
+            out.write(slice()); out.write(slice()); out.flush()
+            gates[1].await()
+            listOf(TsPackets.pat(), TsPackets.pmt(0x1B), TsPackets.pes(0x67), slice()).forEach(out::write); out.flush()
+            gates[2].await()
+            out.write(slice()); out.flush()
+            Thread.sleep(1_000)
+            ex.close()
+        }
+        val rec = recorder("/video.ts", readyAfterMs = 1_000)
+        waitFor { rec.latestOffset == 5 * 188L }
+        now.addAndGet(2_000)
+        gates[0].countDown()
+        waitFor { rec.latestOffset == 7 * 188L }
+        // Two seconds buffered, but no keyframe yet: starting now would be sound over black.
+        assertIs<TimeshiftRecorder.Status.Starting>(rec.status.value)
+
+        gates[1].countDown()
+        waitFor { rec.latestOffset == 11 * 188L }
+        assertIs<TimeshiftRecorder.Status.Starting>(rec.status.value, "keyframe just arrived, nothing after it yet")
+
+        now.addAndGet(1_500)
+        gates[2].countDown()
+        waitFor { rec.latestOffset == 12 * 188L }
+        assertIs<TimeshiftRecorder.Status.Ready>(rec.status.value)
+
+        // Playback starts at the PAT (packet 7) just before the keyframe, so VLC gets the tables it needs first.
+        val keyframe = 7 * 188L
+        // Any target after it starts there; seeking forward from before it lands there too.
+        assertEquals(keyframe, rec.keyframeNear(11 * 188L, preferLater = false, limit = rec.latestOffset))
+        assertEquals(keyframe, rec.keyframeNear(3 * 188L, preferLater = true, limit = rec.latestOffset))
+        // Before the first keyframe, the only one there is.
+        assertEquals(keyframe, rec.keyframeNear(3 * 188L, preferLater = false, limit = rec.latestOffset))
+    }
+
+    @Test
     fun dropsDataOlderThanTheBuffer() {
         server.createContext("/long.ts") { ex ->
             ex.sendResponseHeaders(200, 0)

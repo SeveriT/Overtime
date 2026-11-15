@@ -62,6 +62,11 @@ class TimeshiftRecorder(
     private val newData = lock.newCondition()
     private val chunks = ArrayDeque<Chunk>()
     private val marks = ArrayList<Mark>()
+
+    /** Offsets of packets that start a video keyframe, oldest first; trimmed with the buffer. */
+    private val keyframes = ArrayList<Long>()
+    private val scanner = TsKeyframeScanner()
+    private var lastPatOffset = -1L
     private var written = 0L
     private var chunkCounter = 0
 
@@ -102,6 +107,7 @@ class TimeshiftRecorder(
             chunks.forEach { runCatching { it.raf.close() } }
             chunks.clear()
             marks.clear()
+            keyframes.clear()
             newData.signalAll()
         }
         dir.deleteRecursively()
@@ -113,6 +119,23 @@ class TimeshiftRecorder(
     val liveWall: Long get() = lock.withLock { wallAtLocked(written) }
 
     fun wallAt(offset: Long): Long = lock.withLock { wallAtLocked(offset) }
+
+    /**
+     * The keyframe to start playback at for [target], so the picture appears at once: the last one at
+     * or before it, or with [preferLater] (seeking forward) the first one after it up to [limit].
+     * Falls back to the other side, then to [target] itself when no keyframes are known.
+     */
+    fun keyframeNear(target: Long, preferLater: Boolean, limit: Long): Long = lock.withLock {
+        val before = keyframes.lastOrNull { it <= target }
+        val after = keyframes.firstOrNull { it >= target && it <= limit }
+        (if (preferLater) after ?: before else before ?: after) ?: target
+    }
+
+    /** Average time between keyframes (0 until two are seen); live playback can sit this far behind. */
+    val keyframeIntervalMs: Long get() = lock.withLock {
+        if (keyframes.size < 2) 0L
+        else (wallAtLocked(keyframes.last()) - wallAtLocked(keyframes.first())) / (keyframes.size - 1)
+    }
 
     /** The packet-aligned offset whose data arrived at [wall], clamped to what is buffered. */
     fun offsetAt(wall: Long): Long = lock.withLock {
@@ -315,6 +338,17 @@ class TimeshiftRecorder(
             chunk = Chunk(File(dir, "chunk-${chunkCounter++}.ts"), written, now)
             chunks += chunk
         }
+        var packet = from
+        while (packet + TS_PACKET <= from + length) {
+            val at = written + (packet - from)
+            if (scanner.isPat(data, packet)) lastPatOffset = at
+            if (scanner.isKeyframe(data, packet)) {
+                // Start from the tables just before it: VLC restarts at this offset and can't play anything
+                // until it has seen a PAT and PMT, which HLS segments carry only once, at their start.
+                keyframes += if (lastPatOffset >= 0 && at - lastPatOffset <= PAT_REACH_BYTES) lastPatOffset else at
+            }
+            packet += TS_PACKET
+        }
         chunk.raf.seek(chunk.endOffset - chunk.startOffset)
         chunk.raf.write(data, from, length)
         chunk.endOffset += length
@@ -322,8 +356,20 @@ class TimeshiftRecorder(
         lastAppendAt = now
         addMark(Mark(written, wallEnd))
         prune()
-        if (_status.value == Status.Starting && wallEnd - marks.first().wall >= liveDelayMs) _status.value = Status.Ready
+        if (_status.value == Status.Starting && isReadyLocked(wallEnd)) _status.value = Status.Ready
         newData.signalAll()
+    }
+
+    /**
+     * Enough is buffered to play smoothly — and, when the video stream is known, a keyframe with that much
+     * after it, so playback starts with a picture rather than sound over black. Gives up waiting for a
+     * keyframe after [KEYFRAME_WAIT_MS] in case this stream's keyframes can't be recognised.
+     */
+    private fun isReadyLocked(wallEnd: Long): Boolean {
+        val buffered = wallEnd - marks.first().wall
+        if (buffered < liveDelayMs) return false
+        if (!scanner.knowsVideo || buffered >= KEYFRAME_WAIT_MS) return true
+        return keyframes.any { wallEnd - wallAtLocked(it) >= liveDelayMs }
     }
 
     /** Keeps roughly two marks per second: a new mark replaces the last one if it is close in time. */
@@ -345,6 +391,7 @@ class TimeshiftRecorder(
             val earliest = chunks.first().startOffset
             val earliestWall = wallAtLocked(earliest)
             marks.removeAll { it.offset < earliest }
+            keyframes.removeAll { it < earliest }
             if (marks.isEmpty() || marks.first().offset > earliest) marks.add(0, Mark(earliest, earliestWall))
         }
     }
@@ -416,6 +463,9 @@ class TimeshiftRecorder(
         private const val HLS_START_SEGMENTS = 3
         private const val HLS_RESYNC_MS = 60_000L
         private const val MAX_REDIRECTS = 5
+        private const val KEYFRAME_WAIT_MS = 10_000L
+        /** How far before a keyframe the tables may be and still be included (~a few hundred ms of 4K). */
+        private const val PAT_REACH_BYTES = 4096L * TS_PACKET
 
         internal fun resolve(base: String, relative: String): String =
             runCatching { URI(base).resolve(relative.replace(" ", "%20")).toString() }.getOrDefault(relative)

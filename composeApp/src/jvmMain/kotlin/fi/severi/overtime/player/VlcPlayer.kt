@@ -301,8 +301,12 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
         }
     }
 
-    /** Points VLC at [offset] in the buffer. Caller holds [sessionLock]. */
-    private fun startAt(rec: TimeshiftRecorder, offset: Long) {
+    /**
+     * Points VLC at the keyframe nearest [target] in the buffer (later rather than earlier with
+     * [preferLater]), so the picture appears straight away. Caller holds [sessionLock].
+     */
+    private fun startAt(rec: TimeshiftRecorder, target: Long, preferLater: Boolean = false) {
+        val offset = rec.keyframeNear(target, preferLater, limit = rec.offsetAt(rec.liveWall - cushionMs))
         if (player.status().isPlaying) pendingTracks = player.audio().track() to player.subpictures().track()
         media?.let {
             it.cancel()
@@ -336,7 +340,8 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
         // A full buffer drops its oldest 10 s chunk at a time; a window that only grows slides smoothly instead.
         shownSpan = max(shownSpan, live - start)
         val position = (mediaStartWall + playedMs()).coerceIn(start, dataEdge)
-        val tolerance = cushionMs + LIVE_SLACK_MS + rec.edgeStepMs
+        // Starting on a keyframe can put live playback up to one keyframe interval further back.
+        val tolerance = cushionMs + LIVE_SLACK_MS + rec.edgeStepMs + rec.keyframeIntervalMs.coerceAtMost(MAX_KEYFRAME_SLACK_MS)
         _state.update { it.copy(timeshift = TimeshiftState(live - shownSpan, live, position, liveToleranceMs = tolerance)) }
     }
 
@@ -350,19 +355,22 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
         recorder = null
     }
 
-    override fun seekTo(wallMs: Long) {
+    override fun seekTo(wallMs: Long) = seekTimeshift(wallMs, preferLater = false)
+
+    private fun seekTimeshift(wallMs: Long, preferLater: Boolean) {
         synchronized(sessionLock) {
             val rec = recorder ?: return
             if (media == null) return
             val newest = rec.liveWall - cushionMs
             val target = wallMs.coerceIn(rec.earliestWall, max(rec.earliestWall, newest))
-            startAt(rec, rec.offsetAt(target))
+            startAt(rec, rec.offsetAt(target), preferLater)
         }
     }
 
     override fun seekBy(deltaMs: Long) {
         _state.value.timeshift?.let {
-            seekTo(it.position + deltaMs)
+            // Forward skips land on the next keyframe, so a long keyframe interval can't pull them backwards.
+            seekTimeshift(it.position + deltaMs, preferLater = deltaMs > 0)
             return
         }
         _state.value.media?.let { seekMedia(it.positionMs + deltaMs) }
@@ -555,6 +563,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
     private companion object {
         const val TICK_MS = 500L
         const val TRACK_RESTORE_DELAY_MS = 400L
+        const val MAX_KEYFRAME_SLACK_MS = 10_000L
         const val MIN_CUSHION_MS = 1_500L
         const val LIVE_SLACK_MS = 4_000L
     }
