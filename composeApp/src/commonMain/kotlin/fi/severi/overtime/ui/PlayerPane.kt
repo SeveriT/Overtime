@@ -74,6 +74,9 @@ fun PlayerPane(
     var overlayVisible by remember { mutableStateOf(true) }
     val keepVisible = channel == null || state.paused || state.error != null
 
+    // Keyboard volume or channel changes should reveal the controls just like moving the mouse.
+    LaunchedEffect(settings.volume, state.muted, channel?.id) { lastActivity = nowMillis() }
+
     LaunchedEffect(lastActivity, keepVisible) {
         overlayVisible = true
         if (!keepVisible) {

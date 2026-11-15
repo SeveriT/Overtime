@@ -147,9 +147,12 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     }
 
     fun setVolume(volume: Int) {
-        player.setVolume(volume)
-        updateSettings { it.copy(volume = volume) }
+        val clamped = volume.coerceIn(0, 100)
+        player.setVolume(clamped)
+        updateSettings { it.copy(volume = clamped) }
     }
+
+    fun adjustVolume(delta: Int) = setVolume(_settings.value.volume + delta)
 
     fun toggleFavorite(channel: Channel) = updateSettings {
         it.copy(favorites = if (channel.id in it.favorites) it.favorites - channel.id else it.favorites + channel.id)

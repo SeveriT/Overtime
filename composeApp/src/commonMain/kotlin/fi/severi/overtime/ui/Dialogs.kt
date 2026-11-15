@@ -202,7 +202,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            "Shortcuts: F or F11 fullscreen · Esc leave fullscreen · S channel list · Space pause · M mute · Page Up/Down change channel",
+            "Shortcuts: ← → or Page Up/Down change channel · ↑ ↓ volume · Space pause · M mute · S channel list · F or F11 fullscreen · Esc leave fullscreen",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

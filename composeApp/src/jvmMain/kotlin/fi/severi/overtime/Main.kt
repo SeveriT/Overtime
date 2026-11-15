@@ -52,8 +52,10 @@ fun main() = application {
                 Key.Spacebar -> { vm.player.togglePause(); true }
                 Key.M -> { vm.player.toggleMute(); true }
                 Key.S -> { vm.toggleSidebar(); true }
-                Key.PageUp -> { vm.step(-1); true }
-                Key.PageDown -> { vm.step(1); true }
+                Key.PageUp, Key.DirectionLeft -> { vm.step(-1); true }
+                Key.PageDown, Key.DirectionRight -> { vm.step(1); true }
+                Key.DirectionUp -> { vm.adjustVolume(+5); true }
+                Key.DirectionDown -> { vm.adjustVolume(-5); true }
                 else -> false
             }
         },
