@@ -44,6 +44,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.size.Size as CoilSize
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -143,6 +149,24 @@ fun PillSearchField(value: String, onValueChange: (String) -> Unit, placeholder:
             unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,
         ),
+    )
+}
+
+/**
+ * Poster / backdrop image drawn as sharply as the source allows: decoded at its full size (not
+ * pre-shrunk to the card) and scaled on the GPU with high-quality, mipmapped filtering, so small text
+ * on rated artwork (rating strips, badges) stays legible.
+ */
+@Composable
+fun Artwork(url: String, contentDescription: String?, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
+    val context = LocalPlatformContext.current
+    val request = remember(url) { ImageRequest.Builder(context).data(url).size(CoilSize.ORIGINAL).build() }
+    AsyncImage(
+        model = request,
+        contentDescription = contentDescription,
+        contentScale = contentScale,
+        filterQuality = FilterQuality.High,
+        modifier = modifier,
     )
 }
 

@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.ui.layout.ContentScale
-import coil3.compose.AsyncImage
 import fi.severi.overtime.data.PosterArt
 import fi.severi.overtime.model.DEFAULT_POSTER_TEMPLATE
 import fi.severi.overtime.model.LibraryKind
@@ -157,7 +155,7 @@ private fun PosterPreview(
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         ) {
             if (image != null) {
-                AsyncImage(model = image, contentDescription = "Preview", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                Artwork(image, contentDescription = "Preview", modifier = Modifier.fillMaxSize())
             }
         }
         if (!hideLabels) {

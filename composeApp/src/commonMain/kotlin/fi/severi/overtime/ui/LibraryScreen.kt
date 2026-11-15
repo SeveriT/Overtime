@@ -71,11 +71,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import fi.severi.overtime.AppViewModel
 import fi.severi.overtime.data.PosterArt
 import fi.severi.overtime.data.nowMillis
@@ -407,7 +405,7 @@ private fun PosterCard(
                     modifier = Modifier.align(Alignment.Center).size(32.dp),
                 )
                 if (image != null) {
-                    AsyncImage(model = image, contentDescription = item.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    Artwork(image, contentDescription = item.name, modifier = Modifier.fillMaxSize())
                 }
                 // Rated artwork already carries ratings and badges; add ours only on plain posters.
                 if (!rated) {
@@ -481,7 +479,7 @@ private fun ContinueCard(entry: WatchProgress, style: PosterStyle, onPlay: () ->
     ) {
         Box {
             if (image != null) {
-                AsyncImage(model = image, contentDescription = entry.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                Artwork(image, contentDescription = entry.title, modifier = Modifier.fillMaxSize())
             }
             Box(
                 Modifier.fillMaxSize().background(
@@ -554,7 +552,7 @@ private fun LibraryDetails(vm: AppViewModel, item: LibraryItem, style: PosterSty
                             .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                     ) {
                         if (hero != null) {
-                            AsyncImage(model = hero, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                            Artwork(hero, contentDescription = null, modifier = Modifier.fillMaxSize())
                         }
                     }
                     Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
@@ -681,7 +679,7 @@ private fun EpisodeRow(episode: Episode, progress: WatchProgress?, onPlay: () ->
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null, tint = scheme.onSurfaceVariant)
                 if (episode.image != null) {
-                    AsyncImage(model = episode.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    Artwork(episode.image, contentDescription = null, modifier = Modifier.fillMaxSize())
                 }
                 if (progress != null && !progress.finished && !progress.nextUp && progress.fraction >= WatchProgress.STARTED_AT) {
                     LinearProgressIndicator(
