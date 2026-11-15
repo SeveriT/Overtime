@@ -64,7 +64,7 @@ class ScreenshotTest {
         vm.openGroup("Sport")
         shoot(outDir, "2_channels", 1280, 800) { App(vm) }
 
-        shoot(outDir, "3_settings", 700, 1100) {
+        shoot(outDir, "3_settings", 1600, 900) {
             OvertimeTheme { SettingsDialog(vm, onDismiss = {}, onOpenSources = {}) }
         }
 

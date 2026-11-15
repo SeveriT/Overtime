@@ -63,6 +63,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.window.DialogProperties
 import fi.severi.overtime.AppViewModel
 import fi.severi.overtime.data.nowMillis
 import fi.severi.overtime.model.GroupSort
@@ -75,13 +78,16 @@ private fun DialogFrame(
     title: String,
     onDismiss: () -> Unit,
     actions: @Composable () -> Unit,
+    /** Uses most of a desktop window instead of a phone-sized column. */
+    wide: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = !wide)) {
         Surface(
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.width(600.dp),
+            // Keep a margin above and below so it reads as a dialog, not a page.
+            modifier = if (wide) Modifier.padding(vertical = 32.dp).fillMaxWidth(WIDE_DIALOG_FRACTION).widthIn(max = WIDE_DIALOG_MAX) else Modifier.width(600.dp),
         ) {
             Column(Modifier.padding(top = 24.dp, bottom = 20.dp)) {
                 Text(
@@ -106,6 +112,12 @@ private fun DialogFrame(
         }
     }
 }
+
+private const val WIDE_DIALOG_FRACTION = 0.9f
+private val WIDE_DIALOG_MAX = 1200.dp
+
+/** Below this the wide Settings dialog stacks its two columns. */
+private val TWO_COLUMN_MIN = 840.dp
 
 @Composable
 private fun SectionHeader(text: String) {
@@ -399,6 +411,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     DialogFrame(
         title = "Settings",
         onDismiss = cancel,
+        wide = true,
         actions = {
             TextButton(onClick = cancel, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             Button(
@@ -425,138 +438,155 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
             ) { Text("Save") }
         },
     ) {
-        SectionHeader("Sources")
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                when (sources.size) {
-                    0 -> "No playlists or logins added yet"
-                    1 -> sources.first().name
-                    else -> "${sources.size} sources: ${sources.joinToString { it.name }}"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+        // General settings on the left, the look of subtitles and posters on the right; stacked when narrow.
+        val general: @Composable ColumnScope.() -> Unit = {
+            SectionHeader("Sources")
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    when (sources.size) {
+                        0 -> "No playlists or logins added yet"
+                        1 -> sources.first().name
+                        else -> "${sources.size} sources: ${sources.joinToString { it.name }}"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(12.dp))
+                FilledTonalButton(onClick = onOpenSources, shapes = ButtonDefaults.shapes()) {
+                    Icon(Icons.AutoMirrored.Filled.ViewList, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text("Manage sources")
+                }
+            }
+            SwitchRow(
+                title = "Refresh when the app opens",
+                supporting = "Reloads channels and guides in the background at launch. The saved lists are used until it finishes.",
+                checked = refreshOnLaunch,
+                onCheckedChange = { refreshOnLaunch = it },
             )
-            Spacer(Modifier.width(12.dp))
-            FilledTonalButton(onClick = onOpenSources, shapes = ButtonDefaults.shapes()) {
-                Icon(Icons.AutoMirrored.Filled.ViewList, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                Text("Manage sources")
-            }
-        }
-        SwitchRow(
-            title = "Refresh when the app opens",
-            supporting = "Reloads channels and guides in the background at launch. The saved lists are used until it finishes.",
-            checked = refreshOnLaunch,
-            onCheckedChange = { refreshOnLaunch = it },
-        )
 
-        SectionHeader("Appearance")
-        FieldLabel("Accent colour")
-        ColorPicker(
-            presets = AccentPresets,
-            current = accentColorOf(settings.accentColor),
-            onPick = { color -> vm.updateSettings { it.copy(accentColor = if (color == DefaultAccent) null else color.toHex()) } },
-            supportingText = "Buttons, sliders, selections and progress.",
-        )
-        FieldLabel("Sidebar and title bar colour")
-        ColorPicker(
-            presets = SidebarPresets,
-            current = sidebarColorOf(settings.sidebarColor),
-            onPick = { color -> vm.updateSettings { it.copy(sidebarColor = if (color == DefaultSidebarColor) null else color.toHex()) } },
-            supportingText = "Light colours switch the sidebar text to dark.",
-        )
-        FieldLabel("Channel group order")
-        ConnectedChoiceGroup(
-            options = GroupSort.entries,
-            selected = groupSort,
-            label = { it.label },
-            onSelect = { groupSort = it },
-        )
+            SectionHeader("Appearance")
+            FieldLabel("Accent colour")
+            ColorPicker(
+                presets = AccentPresets,
+                current = accentColorOf(settings.accentColor),
+                onPick = { color -> vm.updateSettings { it.copy(accentColor = if (color == DefaultAccent) null else color.toHex()) } },
+                supportingText = "Buttons, sliders, selections and progress.",
+            )
+            FieldLabel("Sidebar and title bar colour")
+            ColorPicker(
+                presets = SidebarPresets,
+                current = sidebarColorOf(settings.sidebarColor),
+                onPick = { color -> vm.updateSettings { it.copy(sidebarColor = if (color == DefaultSidebarColor) null else color.toHex()) } },
+                supportingText = "Light colours switch the sidebar text to dark.",
+            )
+            FieldLabel("Channel group order")
+            ConnectedChoiceGroup(
+                options = GroupSort.entries,
+                selected = groupSort,
+                label = { it.label },
+                onSelect = { groupSort = it },
+            )
 
-        SectionHeader("Poster cards")
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
-            PosterPreview(posterWidth, posterCorners, landscapePosters, hidePosterLabels, ratedPosters, posterTemplate)
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Live preview", style = MaterialTheme.typography.labelLarge)
-                val width = if (landscapePosters) (posterWidth.dp * 1.8f).toInt() else posterWidth.dp
-                val height = if (landscapePosters) width * 9 / 16 else posterWidth.dp * 3 / 2
-                Text("Width: $width dp", style = MaterialTheme.typography.bodyMedium)
-                Text("Height: $height dp", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Corner radius: ${posterCorners.dp} dp", style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-        FieldLabel("Width")
-        ChipChoice(PosterWidth.entries, posterWidth, { it.label }) { posterWidth = it }
-        FieldLabel("Corner radius")
-        ChipChoice(PosterCorners.entries, posterCorners, { it.label }) { posterCorners = it }
-        SwitchRow(
-            title = "Landscape posters",
-            supporting = "Wide 16:9 cards instead of tall posters.",
-            checked = landscapePosters,
-            onCheckedChange = { landscapePosters = it },
-        )
-        SwitchRow(
-            title = "Hide labels",
-            supporting = "Show artwork only, without the title and year under each card.",
-            checked = hidePosterLabels,
-            onCheckedChange = { hidePosterLabels = it },
-        )
-        SwitchRow(
-            title = "Rated poster artwork",
-            supporting = "Artwork with ratings and badges from the template below, for titles the provider gives a TMDB or IMDb ID.",
-            checked = ratedPosters,
-            onCheckedChange = { ratedPosters = it },
-        )
-        if (ratedPosters) {
+            SectionHeader("Playback")
+            SwitchRow(
+                title = "Live rewind",
+                supporting = "Keeps the last ${settings.rewindMinutes} minutes of the channel you watch so you can pause, " +
+                    "rewind and jump back to live. Uses some disk space while watching.",
+                checked = rewindEnabled,
+                onCheckedChange = { rewindEnabled = it },
+            )
+            OutlinedTextField(userAgent, { userAgent = it }, label = { Text("HTTP user agent") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(
-                value = posterTemplate,
-                onValueChange = { posterTemplate = it },
-                label = { Text("Artwork URL template") },
-                supportingText = { Text("Placeholders: {tmdb_id} {imdb_id} {id} {type} {shape}; add ? to make an ID optional.") },
-                maxLines = 4,
+                caching, { caching = it.filter(Char::isDigit) },
+                label = { Text("Network caching (ms)") },
+                supportingText = { Text("Higher is smoother on flaky connections, lower starts faster.") },
+                singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (posterTemplate.trim() != DEFAULT_POSTER_TEMPLATE) {
-                TextButton(onClick = { posterTemplate = DEFAULT_POSTER_TEMPLATE }, shapes = ButtonDefaults.shapes()) {
-                    Text("Reset template")
+
+            SectionHeader("Info")
+            Text(
+                "Shortcuts: ← → or Page Up/Down change channel · Shift+← → rewind / forward 10 s · End back to live · " +
+                    "↑ ↓ volume · Space pause · M mute · S channel list · I stream info · B audio track · V subtitles · G guide (← → move through time, Home now) · L movies & series (← → skip 10 s while a movie plays) · F or F11 fullscreen · Esc back / leave fullscreen",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "Data folder: ${vm.dataDirectory}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val looks: @Composable ColumnScope.() -> Unit = {
+            SectionHeader("Subtitles")
+            SubtitleStyleEditor(subtitles, onChange = { subtitles = it })
+
+            SectionHeader("Poster cards")
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+                PosterPreview(posterWidth, posterCorners, landscapePosters, hidePosterLabels, ratedPosters, posterTemplate)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Live preview", style = MaterialTheme.typography.labelLarge)
+                    val width = if (landscapePosters) (posterWidth.dp * 1.8f).toInt() else posterWidth.dp
+                    val height = if (landscapePosters) width * 9 / 16 else posterWidth.dp * 3 / 2
+                    Text("Width: $width dp", style = MaterialTheme.typography.bodyMedium)
+                    Text("Height: $height dp", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Corner radius: ${posterCorners.dp} dp", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            FieldLabel("Width")
+            ChipChoice(PosterWidth.entries, posterWidth, { it.label }) { posterWidth = it }
+            FieldLabel("Corner radius")
+            ChipChoice(PosterCorners.entries, posterCorners, { it.label }) { posterCorners = it }
+            SwitchRow(
+                title = "Landscape posters",
+                supporting = "Wide 16:9 cards instead of tall posters.",
+                checked = landscapePosters,
+                onCheckedChange = { landscapePosters = it },
+            )
+            SwitchRow(
+                title = "Hide labels",
+                supporting = "Show artwork only, without the title and year under each card.",
+                checked = hidePosterLabels,
+                onCheckedChange = { hidePosterLabels = it },
+            )
+            SwitchRow(
+                title = "Rated poster artwork",
+                supporting = "Artwork with ratings and badges from the template below, for titles the provider gives a TMDB or IMDb ID.",
+                checked = ratedPosters,
+                onCheckedChange = { ratedPosters = it },
+            )
+            if (ratedPosters) {
+                OutlinedTextField(
+                    value = posterTemplate,
+                    onValueChange = { posterTemplate = it },
+                    label = { Text("Artwork URL template") },
+                    supportingText = { Text("Placeholders: {tmdb_id} {imdb_id} {id} {type} {shape}; add ? to make an ID optional.") },
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (posterTemplate.trim() != DEFAULT_POSTER_TEMPLATE) {
+                    TextButton(onClick = { posterTemplate = DEFAULT_POSTER_TEMPLATE }, shapes = ButtonDefaults.shapes()) {
+                        Text("Reset template")
+                    }
                 }
             }
         }
-
-        SectionHeader("Playback")
-        SwitchRow(
-            title = "Live rewind",
-            supporting = "Keeps the last ${settings.rewindMinutes} minutes of the channel you watch so you can pause, " +
-                "rewind and jump back to live. Uses some disk space while watching.",
-            checked = rewindEnabled,
-            onCheckedChange = { rewindEnabled = it },
-        )
-        OutlinedTextField(userAgent, { userAgent = it }, label = { Text("HTTP user agent") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(
-            caching, { caching = it.filter(Char::isDigit) },
-            label = { Text("Network caching (ms)") },
-            supportingText = { Text("Higher is smoother on flaky connections, lower starts faster.") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        SectionHeader("Subtitles")
-        SubtitleStyleEditor(subtitles, onChange = { subtitles = it })
-
-        SectionHeader("Info")
-        Text(
-            "Shortcuts: ← → or Page Up/Down change channel · Shift+← → rewind / forward 10 s · End back to live · " +
-                "↑ ↓ volume · Space pause · M mute · S channel list · I stream info · B audio track · V subtitles · G guide (← → move through time, Home now) · L movies & series (← → skip 10 s while a movie plays) · F or F11 fullscreen · Esc back / leave fullscreen",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            "Data folder: ${vm.dataDirectory}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        BoxWithConstraints {
+            if (maxWidth >= TWO_COLUMN_MIN) {
+                Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = general)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = looks)
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    general()
+                    looks()
+                }
+            }
+        }
     }
 }
