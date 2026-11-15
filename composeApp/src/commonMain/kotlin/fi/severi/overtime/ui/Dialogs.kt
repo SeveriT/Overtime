@@ -19,6 +19,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -171,13 +172,33 @@ private fun defaultName(type: SourceType, url: String): String = when (type) {
 }
 
 @Composable
-fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
+fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () -> Unit) {
     val settings by vm.settings.collectAsState()
+    val sources by vm.sources.collectAsState()
     var userAgent by remember { mutableStateOf(settings.userAgent) }
     var caching by remember { mutableStateOf(settings.networkCachingMs.toString()) }
     var groupSort by remember { mutableStateOf(settings.groupSort) }
 
     DialogFrame("Settings", onDismiss) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Sources", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    when (sources.size) {
+                        0 -> "No playlists or logins added yet"
+                        1 -> sources.first().name
+                        else -> "${sources.size} sources: ${sources.joinToString { it.name }}"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            OutlinedButton(onClick = onOpenSources) { Text("Manage sources") }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Text("Channel group order", style = MaterialTheme.typography.labelLarge)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             GroupSort.entries.forEachIndexed { index, option ->

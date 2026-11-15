@@ -22,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Refresh
@@ -72,7 +71,6 @@ import fi.severi.overtime.model.GroupEntry
 @Composable
 fun ChannelSidebar(
     vm: AppViewModel,
-    onOpenSources: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -106,7 +104,6 @@ fun ChannelSidebar(
             IconButton(onClick = { vm.refreshAll() }, enabled = busy == null && sources.isNotEmpty()) {
                 Icon(Icons.Default.Refresh, contentDescription = "Refresh")
             }
-            IconButton(onClick = onOpenSources) { Icon(Icons.AutoMirrored.Filled.ViewList, contentDescription = "Sources") }
             IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
         }
 

@@ -5,7 +5,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val DarkColors = darkColorScheme(
+/** The app's colour scheme, also used outside Compose (e.g. to tint the native title bar). */
+val OvertimeColors = darkColorScheme(
     primary = Color(0xFF8AB4F8),
     onPrimary = Color(0xFF0B1A33),
     primaryContainer = Color(0xFF1E3A6E),
@@ -26,5 +27,5 @@ private val DarkColors = darkColorScheme(
 
 @Composable
 fun OvertimeTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = DarkColors, content = content)
+    MaterialTheme(colorScheme = OvertimeColors, content = content)
 }

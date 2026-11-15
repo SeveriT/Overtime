@@ -24,6 +24,7 @@ import fi.severi.overtime.data.FileStore
 import fi.severi.overtime.data.Repository
 import fi.severi.overtime.player.VlcPlayer
 import fi.severi.overtime.ui.App
+import fi.severi.overtime.ui.OvertimeColors
 import fi.severi.overtime.ui.OvertimeTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -64,6 +65,11 @@ fun main() = application {
             }
         },
     ) {
+        // Re-applied after fullscreen changes in case the native window was recreated.
+        LaunchedEffect(window, fullscreen) {
+            TitleBar.apply(window, caption = OvertimeColors.surface, text = OvertimeColors.onSurface)
+        }
+
         if (vm != null) {
             App(vm)
         } else {

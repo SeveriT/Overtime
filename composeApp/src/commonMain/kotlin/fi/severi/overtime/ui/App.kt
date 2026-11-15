@@ -34,7 +34,6 @@ fun App(vm: AppViewModel) {
                 if (sidebarVisible) {
                     ChannelSidebar(
                         vm = vm,
-                        onOpenSources = { showSources = true },
                         onOpenSettings = { showSettings = true },
                         modifier = Modifier.width(340.dp).fillMaxHeight(),
                     )
@@ -47,7 +46,16 @@ fun App(vm: AppViewModel) {
                 )
             }
             if (showSources) SourcesDialog(vm, onDismiss = { showSources = false })
-            if (showSettings) SettingsDialog(vm, onDismiss = { showSettings = false })
+            if (showSettings) {
+                SettingsDialog(
+                    vm,
+                    onDismiss = { showSettings = false },
+                    onOpenSources = {
+                        showSettings = false
+                        showSources = true
+                    },
+                )
+            }
         }
     }
 }
