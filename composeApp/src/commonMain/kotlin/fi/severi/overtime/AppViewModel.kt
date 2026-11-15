@@ -198,9 +198,20 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     // ---- movies & series ----------------------------------------------------------
 
+    /** Opens Movies & series. A live channel stops; a movie or episode keeps playing (shown as a mini player). */
     fun openLibrary() {
         closeGuide()
+        if (currentChannel.value != null) stopPlayback()
         library.open()
+    }
+
+    /** Stops whatever is playing; the next launch won't auto-resume a stopped channel. */
+    fun stopPlayback() {
+        saveProgressNow()
+        player.stop()
+        currentChannel.value = null
+        currentVod.value = null
+        updateSettings { it.copy(lastChannelId = null) }
     }
 
     fun playMovie(item: LibraryItem, details: MovieDetails? = null, fromStart: Boolean = false) {

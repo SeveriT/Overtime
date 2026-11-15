@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.outlined.ViewTimeline
@@ -427,6 +428,7 @@ private fun ToolbarButtons(
                 ) { vm.seekBy(REWIND_STEP_MS) }
             }
             if (!onDemand) ToolbarButton(Icons.Default.SkipNext, "Next channel (→)") { vm.step(1) }
+            ToolbarButton(Icons.Default.Stop, "Stop") { vm.stopPlayback() }
 
             VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
