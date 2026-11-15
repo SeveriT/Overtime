@@ -278,6 +278,13 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         refreshSource(source.id)
     }
 
+    /** Saves changes to an existing source (same id, so favourites stay) and reloads its channels and guide. */
+    fun updateSource(source: Source) {
+        _sources.update { list -> list.map { if (it.id == source.id) source else it } }
+        repo.saveSources(_sources.value)
+        refreshSource(source.id)
+    }
+
     fun removeSource(id: String) {
         _sources.update { list -> list.filterNot { it.id == id } }
         repo.saveSources(_sources.value)

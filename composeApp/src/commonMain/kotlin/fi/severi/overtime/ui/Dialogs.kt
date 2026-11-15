@@ -18,7 +18,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -140,41 +142,67 @@ fun SourcesDialog(vm: AppViewModel, onDismiss: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var epgUrl by remember { mutableStateOf("") }
 
-    val canAdd = url.isNotBlank() && (type != SourceType.XTREAM || (username.isNotBlank() && password.isNotBlank()))
+    /** Source being edited; null while adding a new one. Editing keeps the id, so favourites survive. */
+    var editingId by remember { mutableStateOf<String?>(null) }
 
-    fun add() {
-        vm.addSource(
-            Source(
-                id = nowMillis().toString(36),
-                name = name.trim().ifEmpty { defaultName(type, url) },
-                type = type,
-                url = url.trim(),
-                username = username.trim(),
-                password = password.trim(),
-                epgUrl = epgUrl.trim(),
-            ),
-        )
+    val canSave = url.isNotBlank() && (type != SourceType.XTREAM || (username.isNotBlank() && password.isNotBlank()))
+
+    fun resetForm() {
+        editingId = null
         name = ""; url = ""; username = ""; password = ""; epgUrl = ""
+    }
+
+    fun edit(source: Source) {
+        editingId = source.id
+        type = source.type
+        name = source.name
+        url = source.url
+        username = source.username
+        password = source.password
+        epgUrl = source.epgUrl
+    }
+
+    fun save() {
+        val source = Source(
+            id = editingId ?: nowMillis().toString(36),
+            name = name.trim().ifEmpty { defaultName(type, url) },
+            type = type,
+            url = url.trim(),
+            username = username.trim(),
+            password = password.trim(),
+            epgUrl = epgUrl.trim(),
+        )
+        if (editingId != null) vm.updateSource(source) else vm.addSource(source)
+        resetForm()
     }
 
     DialogFrame(
         title = "Sources",
         onDismiss = onDismiss,
         actions = {
-            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Close") }
-            Button(onClick = ::add, enabled = canAdd, shapes = ButtonDefaults.shapes()) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+            if (editingId != null) {
+                TextButton(onClick = ::resetForm, shapes = ButtonDefaults.shapes()) { Text("Cancel edit") }
+            } else {
+                TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Close") }
+            }
+            Button(onClick = ::save, enabled = canSave, shapes = ButtonDefaults.shapes()) {
+                Icon(
+                    if (editingId != null) Icons.Default.Check else Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(ButtonDefaults.IconSize),
+                )
                 Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                Text("Add source")
+                Text(if (editingId != null) "Save changes" else "Add source")
             }
         },
     ) {
         if (sources.isNotEmpty()) {
             LazyColumn(Modifier.heightIn(max = 240.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(sources, key = { it.id }) { source ->
+                    val editing = source.id == editingId
                     Surface(
                         shape = MaterialTheme.shapes.largeIncreased,
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        color = if (editing) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
@@ -185,12 +213,17 @@ fun SourcesDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                             Column(Modifier.weight(1f)) {
                                 Text(source.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
-                                    "${source.type.label} · ${source.url}",
+                                    "${source.type.label} · ${source.url}" + if (source.epgUrl.isNotBlank()) " · custom guide" else "",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
+                            }
+                            WithTooltip("Edit") {
+                                FilledTonalIconButton(onClick = { edit(source) }, shapes = IconButtonDefaults.shapes()) {
+                                    Icon(Icons.Outlined.Edit, contentDescription = "Edit")
+                                }
                             }
                             WithTooltip("Refresh") {
                                 FilledTonalIconButton(
@@ -214,7 +247,7 @@ fun SourcesDialog(vm: AppViewModel, onDismiss: () -> Unit) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 4.dp))
         }
 
-        SectionHeader("Add source")
+        SectionHeader(if (editingId != null) "Edit source" else "Add source")
         ConnectedChoiceGroup(
             options = SourceType.entries,
             selected = type,
@@ -247,9 +280,19 @@ fun SourcesDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
             }
-        } else {
-            OutlinedTextField(epgUrl, { epgUrl = it }, label = { Text("XMLTV guide URL (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
+        OutlinedTextField(
+            epgUrl, { epgUrl = it },
+            label = { Text("XMLTV guide URL (optional)") },
+            supportingText = {
+                Text(
+                    if (type == SourceType.XTREAM) "Leave empty to use the provider's own guide. Gzipped (.xml.gz) guides work too."
+                    else "Gzipped (.xml.gz) guides work too.",
+                )
+            },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
