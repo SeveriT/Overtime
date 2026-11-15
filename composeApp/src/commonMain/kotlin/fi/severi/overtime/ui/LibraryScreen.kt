@@ -37,7 +37,13 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.ui.input.pointer.pointerInput
+import fi.severi.overtime.model.VodPlayback
+import fi.severi.overtime.player.VideoSurface
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Movie
@@ -195,6 +201,9 @@ fun LibraryScreen(vm: AppViewModel) {
                             LibraryEmpty("This provider has no ${kind.label.lowercase()}.")
                         else -> LibraryHome(vm, style, categories.map { it.id to it.name }, rows, continueWatching, selected, ::progressOf)
                     }
+                    // A movie or episode keeps playing while browsing, in a small floating player.
+                    val vod by vm.currentVod.collectAsState()
+                    vod?.let { MiniPlayer(vm, it, Modifier.align(Alignment.BottomEnd).padding(24.dp)) }
                 }
             }
             AnimatedVisibility(
@@ -519,6 +528,73 @@ private fun ContinueCard(entry: WatchProgress, style: PosterStyle, onPlay: () ->
                     drawStopIndicator = {},
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(4.dp),
                 )
+            }
+        }
+    }
+}
+
+// ---- mini player ---------------------------------------------------------------------------
+
+/** Picture-in-picture while browsing: video, progress, title, play/pause, back to the player, stop. */
+@Composable
+private fun MiniPlayer(vm: AppViewModel, playback: VodPlayback, modifier: Modifier = Modifier) {
+    val state by vm.player.state.collectAsState()
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = scheme.surfaceContainerHigh,
+        shadowElevation = 8.dp,
+        modifier = modifier.width(360.dp),
+    ) {
+        Column {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .background(Color.Black)
+                    .pointerInput(Unit) { detectTapGestures(onDoubleTap = { vm.library.close() }) },
+            ) {
+                VideoSurface(vm.player, Modifier.fillMaxSize())
+                if (state.buffering != null && !state.playing) {
+                    LoadingIndicator(Modifier.align(Alignment.Center).size(40.dp))
+                }
+                state.media?.let { media ->
+                    LinearProgressIndicator(
+                        progress = { (media.positionMs.toFloat() / media.durationMs).coerceIn(0f, 1f) },
+                        color = scheme.error,
+                        trackColor = Color.White.copy(alpha = 0.2f),
+                        drawStopIndicator = {},
+                        gapSize = 0.dp,
+                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp),
+                    )
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(playback.title, style = MaterialTheme.typography.titleSmallEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    playback.subtitle?.let {
+                        Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                WithTooltip(if (state.paused) "Play" else "Pause") {
+                    FilledTonalIconButton(onClick = { vm.player.togglePause() }, shapes = IconButtonDefaults.shapes()) {
+                        Icon(if (state.paused) Icons.Default.PlayArrow else Icons.Default.Pause, contentDescription = if (state.paused) "Play" else "Pause")
+                    }
+                }
+                WithTooltip("Back to the player") {
+                    IconButton(onClick = vm.library::close, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.Default.OpenInFull, contentDescription = "Back to the player")
+                    }
+                }
+                WithTooltip("Stop") {
+                    IconButton(onClick = vm::stopPlayback, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.Default.Close, contentDescription = "Stop")
+                    }
+                }
             }
         }
     }
