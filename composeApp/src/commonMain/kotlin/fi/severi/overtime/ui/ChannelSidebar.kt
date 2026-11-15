@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.LiveTv
+import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -111,6 +112,14 @@ fun ChannelSidebar(
                 style = MaterialTheme.typography.titleLargeEmphasized,
                 modifier = Modifier.weight(1f),
             )
+            val hasLibrary by vm.hasLibrary.collectAsState()
+            if (hasLibrary) {
+                WithTooltip("Movies & series (L)", above = false) {
+                    IconButton(onClick = vm::openLibrary, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.Outlined.VideoLibrary, contentDescription = "Movies & series")
+                    }
+                }
+            }
             WithTooltip("Refresh", above = false) {
                 IconButton(
                     onClick = { vm.refreshAll() },

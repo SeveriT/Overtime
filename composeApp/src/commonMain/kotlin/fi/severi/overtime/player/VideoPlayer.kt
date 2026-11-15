@@ -44,6 +44,9 @@ data class StreamStats(
     val bufferBytes: Long?,
 )
 
+/** Position within an on-demand file (movie, episode). */
+data class MediaProgress(val positionMs: Long, val durationMs: Long)
+
 data class PlayerState(
     val playing: Boolean = false,
     val paused: Boolean = false,
@@ -53,6 +56,10 @@ data class PlayerState(
     val volume: Int = 100,
     val error: String? = null,
     val timeshift: TimeshiftState? = null,
+    /** Set for on-demand files with a known length. */
+    val media: MediaProgress? = null,
+    /** An on-demand file played to the end. */
+    val ended: Boolean = false,
 )
 
 interface VideoPlayer {
@@ -69,8 +76,11 @@ interface VideoPlayer {
     /** Jumps to wall-clock time [wallMs] inside the rewind buffer. */
     fun seekTo(wallMs: Long) = Unit
 
-    /** Moves [deltaMs] back (negative) or forward within the rewind buffer. */
+    /** Moves [deltaMs] back (negative) or forward: within the rewind buffer, or within an on-demand file. */
     fun seekBy(deltaMs: Long) = Unit
+
+    /** Jumps to [positionMs] in an on-demand file. */
+    fun seekMedia(positionMs: Long) = Unit
 
     /** Returns to the live edge. */
     fun goLive() = Unit

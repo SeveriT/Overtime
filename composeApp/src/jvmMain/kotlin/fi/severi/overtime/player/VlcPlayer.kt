@@ -154,7 +154,12 @@ class VlcPlayer : VideoPlayer {
             override fun finished(mediaPlayer: MediaPlayer) {
                 // A buffered input only "ends" because we replaced it (seek) or stopped recording.
                 if (recorder != null) return
-                _state.update { it.copy(playing = false, buffering = null, error = "Stream ended") }
+                // A movie or episode reaching its end is normal; a live stream ending is not.
+                if (_state.value.media != null) {
+                    _state.update { it.copy(playing = false, buffering = null, ended = true) }
+                } else {
+                    _state.update { it.copy(playing = false, buffering = null, error = "Stream ended") }
+                }
             }
         })
     }
@@ -168,6 +173,27 @@ class VlcPlayer : VideoPlayer {
     init {
         // Buffers left behind by a crash.
         timeshiftRoot.deleteRecursively()
+        // Position and length of on-demand files for the seek bar.
+        scope.launch {
+            while (currentCoroutineContext().isActive) {
+                delay(TICK_MS)
+                publishMediaProgress()
+            }
+        }
+    }
+
+    private fun publishMediaProgress() {
+        val length = if (recorder == null) player.status().length() else 0L
+        val progress = if (length > 0) MediaProgress(player.status().time().coerceIn(0, length), length) else null
+        if (progress != _state.value.media) _state.update { it.copy(media = progress) }
+    }
+
+    override fun seekMedia(positionMs: Long) {
+        val length = _state.value.media?.durationMs ?: return
+        if (recorder != null) return
+        player.controls().setTime(positionMs.coerceIn(0, length))
+        _state.update { it.copy(ended = false) }
+        publishMediaProgress()
     }
 
     @Volatile private var recorder: TimeshiftRecorder? = null
@@ -268,8 +294,11 @@ class VlcPlayer : VideoPlayer {
     }
 
     override fun seekBy(deltaMs: Long) {
-        val position = _state.value.timeshift?.position ?: return
-        seekTo(position + deltaMs)
+        _state.value.timeshift?.let {
+            seekTo(it.position + deltaMs)
+            return
+        }
+        _state.value.media?.let { seekMedia(it.positionMs + deltaMs) }
     }
 
     override fun goLive() = seekTo(Long.MAX_VALUE)
@@ -334,7 +363,9 @@ class VlcPlayer : VideoPlayer {
     override fun play(url: String, networkCachingMs: Int, userAgent: String, rewindBufferMs: Long) {
         synchronized(sessionLock) {
             endSession()
-            _state.update { it.copy(playing = false, paused = false, buffering = 0f, error = null, timeshift = null) }
+            _state.update {
+                it.copy(playing = false, paused = false, buffering = 0f, error = null, timeshift = null, media = null, ended = false)
+            }
             if (rewindBufferMs <= 0) {
                 _frame.value = null; yuv.clear()
                 playDirect(url, networkCachingMs, userAgent)
@@ -363,6 +394,12 @@ class VlcPlayer : VideoPlayer {
     }
 
     override fun togglePause() {
+        if (_state.value.ended) {
+            // Play again from the start after a movie finished.
+            _state.update { it.copy(ended = false) }
+            player.controls().play()
+            return
+        }
         if (_state.value.playing || _state.value.paused) player.controls().pause()
     }
 

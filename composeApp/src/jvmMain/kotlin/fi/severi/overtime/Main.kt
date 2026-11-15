@@ -69,6 +69,15 @@ fun main() = application {
         icon = appIcon,
         onKeyEvent = { event ->
             if (event.type != KeyEventType.KeyDown || vm == null) return@Window false
+            // The library is a browsing page: only closing keys and playback basics apply.
+            if (vm.library.visible.value) {
+                return@Window when (event.key) {
+                    Key.Escape, Key.L -> { vm.library.close(); true }
+                    Key.Spacebar -> { vm.player.togglePause(); true }
+                    Key.F11 -> { vm.toggleFullscreen(); true }
+                    else -> false
+                }
+            }
             // In the guide, left/right move through time (30 min, or 3 h with Shift) instead of changing channel.
             if (vm.guideVisible.value) {
                 val step = if (event.isShiftPressed) 3 * GUIDE_STEP_MS else GUIDE_STEP_MS
@@ -82,6 +91,7 @@ fun main() = application {
             when (event.key) {
                 Key.F, Key.F11 -> { vm.toggleFullscreen(); true }
                 Key.G -> { vm.toggleGuide(); true }
+                Key.L -> { if (vm.hasLibrary.value) vm.openLibrary(); true }
                 Key.Escape -> when {
                     vm.guideVisible.value -> { vm.closeGuide(); true }
                     fullscreen -> { vm.setFullscreen(false); true }
@@ -92,8 +102,15 @@ fun main() = application {
                 Key.M -> { vm.player.toggleMute(); true }
                 Key.S -> { vm.toggleSidebar(); true }
                 Key.I -> { vm.toggleStats(); true }
-                Key.DirectionLeft -> { if (event.isShiftPressed) vm.seekBy(-REWIND_STEP_MS) else vm.step(-1); true }
-                Key.DirectionRight -> { if (event.isShiftPressed) vm.seekBy(REWIND_STEP_MS) else vm.step(1); true }
+                // Movies seek with plain arrows; live TV changes channel unless Shift is held.
+                Key.DirectionLeft -> {
+                    if (event.isShiftPressed || vm.currentVod.value != null) vm.seekBy(-REWIND_STEP_MS) else vm.step(-1)
+                    true
+                }
+                Key.DirectionRight -> {
+                    if (event.isShiftPressed || vm.currentVod.value != null) vm.seekBy(REWIND_STEP_MS) else vm.step(1)
+                    true
+                }
                 Key.PageUp -> { vm.step(-1); true }
                 Key.PageDown -> { vm.step(1); true }
                 Key.MoveEnd -> { vm.goLive(); true }

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.outlined.ViewTimeline
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ContainedLoadingIndicator
@@ -75,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import fi.severi.overtime.AppViewModel
 import fi.severi.overtime.data.formatClock
 import fi.severi.overtime.data.nowMillis
+import fi.severi.overtime.player.MediaProgress
 import fi.severi.overtime.player.REWIND_STEP_MS
 import fi.severi.overtime.player.TimeshiftState
 import fi.severi.overtime.player.VideoSurface
@@ -105,15 +107,17 @@ fun PlayerPane(
 ) {
     val state by vm.player.state.collectAsState()
     val channel by vm.currentChannel.collectAsState()
+    val vod by vm.currentVod.collectAsState()
     val settings by vm.settings.collectAsState()
     val clock by vm.clock.collectAsState()
+    val hasContent = channel != null || vod != null
 
     var lastActivity by remember { mutableStateOf(nowMillis()) }
     var overlayVisible by remember { mutableStateOf(true) }
-    val keepVisible = channel == null || state.paused || state.error != null
+    val keepVisible = !hasContent || state.paused || state.error != null || state.ended
 
     // Keyboard channel changes reveal the controls just like moving the mouse.
-    LaunchedEffect(channel?.id) { lastActivity = nowMillis() }
+    LaunchedEffect(channel?.id, vod) { lastActivity = nowMillis() }
 
     // Volume changes from the keyboard show a short popup; the toolbar slider covers it when visible.
     var volumeFlyoutVisible by remember { mutableStateOf(false) }
@@ -157,7 +161,8 @@ fun PlayerPane(
         VideoSurface(vm.player, Modifier.fillMaxSize())
 
         when {
-            channel == null -> CenterMessage("Pick a channel from the list")
+            !hasContent -> CenterMessage("Pick a channel from the list")
+            state.ended -> CenterMessage("Finished · press play to watch again")
             state.error != null -> CenterMessage(state.error!!, isError = true)
             state.buffering != null && !state.playing -> ContainedLoadingIndicator(
                 Modifier.align(Alignment.Center).size(72.dp),
@@ -241,6 +246,26 @@ fun PlayerPane(
                         }
                     }
                 }
+                vod?.let { playback ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent)))
+                            .padding(horizontal = 28.dp, vertical = 24.dp)
+                            .align(Alignment.TopStart),
+                    ) {
+                        Text(
+                            playback.title,
+                            style = MaterialTheme.typography.headlineSmallEmphasized,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        playback.subtitle?.let {
+                            Text(it, style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = 0.7f))
+                        }
+                    }
+                }
 
                 PlayerToolbar(
                     vm = vm,
@@ -250,6 +275,8 @@ fun PlayerPane(
                     fullscreen = fullscreen,
                     sidebarVisible = sidebarVisible,
                     timeshift = state.timeshift,
+                    media = state.media,
+                    onDemand = vod != null,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
                 )
             }
@@ -258,7 +285,7 @@ fun PlayerPane(
         // Stream info stays up independently of the auto-hiding controls, like mpv's stats overlay.
         val statsVisible by vm.statsVisible.collectAsState()
         AnimatedVisibility(
-            visible = statsVisible && channel != null,
+            visible = statsVisible && hasContent,
             enter = fadeIn() + scaleIn(initialScale = 0.95f),
             exit = fadeOut() + scaleOut(targetScale = 0.95f),
             modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
@@ -282,24 +309,65 @@ private fun PlayerToolbar(
     fullscreen: Boolean,
     sidebarVisible: Boolean,
     timeshift: TimeshiftState?,
+    media: MediaProgress?,
+    onDemand: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val shape = if (timeshift != null) MaterialTheme.shapes.extraLargeIncreased else CircleShape
+    val twoRows = timeshift != null || media != null
+    val shape = if (twoRows) MaterialTheme.shapes.extraLargeIncreased else CircleShape
     FloatingPill(modifier, shape) {
         Column(
             Modifier.width(IntrinsicSize.Max).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (timeshift != null) {
-                TimeshiftBar(
+            when {
+                timeshift != null -> TimeshiftBar(
                     state = timeshift,
                     onSeek = vm::seekTo,
                     onGoLive = vm::goLive,
                     modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp),
                 )
+                media != null -> MediaBar(
+                    progress = media,
+                    onSeek = vm.player::seekMedia,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp),
+                )
             }
-            ToolbarButtons(vm, paused, muted, volume, fullscreen, sidebarVisible, timeshift)
+            ToolbarButtons(vm, paused, muted, volume, fullscreen, sidebarVisible, timeshift, media, onDemand)
         }
+    }
+}
+
+/** Seek bar for movies and episodes: elapsed time, a continuous slider, time remaining. */
+@Composable
+private fun MediaBar(progress: MediaProgress, onSeek: (Long) -> Unit, modifier: Modifier = Modifier) {
+    var dragValue by remember { mutableStateOf<Float?>(null) }
+    val length = progress.durationMs.toFloat().coerceAtLeast(1f)
+    val value = (dragValue ?: progress.positionMs.toFloat()).coerceIn(0f, length)
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(
+            formatDuration(value.toLong()),
+            style = MaterialTheme.typography.labelLargeEmphasized.copy(fontFeatureSettings = "tnum"),
+            modifier = Modifier.width(64.dp),
+        )
+        Slider(
+            value = value,
+            onValueChange = { dragValue = it },
+            onValueChangeFinished = {
+                dragValue?.let { onSeek(it.toLong()) }
+                dragValue = null
+            },
+            valueRange = 0f..length,
+            colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+            modifier = Modifier.weight(1f).semantics { contentDescription = "Position" },
+        )
+        Text(
+            "−" + formatDuration((length - value).toLong()),
+            style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(72.dp),
+        )
     }
 }
 
@@ -312,7 +380,13 @@ private fun ToolbarButtons(
     fullscreen: Boolean,
     sidebarVisible: Boolean,
     timeshift: TimeshiftState?,
+    media: MediaProgress?,
+    onDemand: Boolean,
 ) {
+    val hasLibrary by vm.hasLibrary.collectAsState()
+    val canSkip = timeshift != null || media != null
+    // Movies seek with plain arrows; live TV uses Shift so the arrows can change channel.
+    val skipKey = if (onDemand) "" else "Shift+"
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -322,12 +396,15 @@ private fun ToolbarButtons(
                 if (sidebarVisible) "Hide channel list (S)" else "Show channel list (S)",
             ) { vm.toggleSidebar() }
             ToolbarButton(Icons.Outlined.ViewTimeline, "Programme guide (G)") { vm.openGuide() }
+            if (hasLibrary) {
+                ToolbarButton(Icons.Outlined.VideoLibrary, "Movies & series (L)") { vm.openLibrary() }
+            }
 
             VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
-            ToolbarButton(Icons.Default.SkipPrevious, "Previous channel (←)") { vm.step(-1) }
-            if (timeshift != null) {
-                ToolbarButton(Icons.Default.Replay10, "Back 10 seconds (Shift+←)") { vm.seekBy(-REWIND_STEP_MS) }
+            if (!onDemand) ToolbarButton(Icons.Default.SkipPrevious, "Previous channel (←)") { vm.step(-1) }
+            if (canSkip) {
+                ToolbarButton(Icons.Default.Replay10, "Back 10 seconds (${skipKey}←)") { vm.seekBy(-REWIND_STEP_MS) }
             }
             WithTooltip(if (paused) "Play (Space)" else "Pause (Space)") {
                 FilledIconButton(
@@ -342,14 +419,14 @@ private fun ToolbarButtons(
                     )
                 }
             }
-            if (timeshift != null) {
+            if (canSkip) {
                 ToolbarButton(
                     Icons.Default.Forward10,
-                    "Forward 10 seconds (Shift+→)",
-                    enabled = !timeshift.isLive,
+                    "Forward 10 seconds (${skipKey}→)",
+                    enabled = timeshift?.isLive != true,
                 ) { vm.seekBy(REWIND_STEP_MS) }
             }
-            ToolbarButton(Icons.Default.SkipNext, "Next channel (→)") { vm.step(1) }
+            if (!onDemand) ToolbarButton(Icons.Default.SkipNext, "Next channel (→)") { vm.step(1) }
 
             VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
 

@@ -20,6 +20,10 @@ Compose Multiplatform UI, libVLC playback through vlcj 4.x (VLC 3.x must be inst
   (`NavigationDrawerItem` pills, `surfaceContainerLow`); player controls live in the floating pill
   toolbar; both volume bars use `VolumeSlider`. Shared pieces are in `ui/Components.kt`.
 - Dialogs go through `DialogFrame` in `ui/Dialogs.kt` (scrollable body, fixed action row).
+- Full-window pages: Guide (`ui/GuideScreen.kt`, G) and Movies & series (`ui/LibraryScreen.kt` +
+  `LibraryModel`, L; Xtream only). On-demand titles play directly (no rewind recorder) with a seek bar.
+- Xtream JSON is inconsistent across panels: read it with the lenient helpers in `XtreamApi`
+  (`str`, `obj`, `firstOf`), never `jsonPrimitive.content` (JSON null would become "null").
 - UI review without VLC: `OVERTIME_SCREENSHOTS=<dir> .\gradlew :composeApp:jvmTest` renders the main
   screens to PNGs with demo data (`ScreenshotTest`).
 - State lives in `AppViewModel` as `StateFlow`s; composables only `collectAsState()`.

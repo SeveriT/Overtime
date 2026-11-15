@@ -5,6 +5,11 @@ import fi.severi.overtime.data.nowMillis
 import fi.severi.overtime.model.AppSettings
 import fi.severi.overtime.model.Channel
 import fi.severi.overtime.model.EpgData
+import fi.severi.overtime.model.Episode
+import fi.severi.overtime.model.LibraryItem
+import fi.severi.overtime.model.Season
+import fi.severi.overtime.model.SourceType
+import fi.severi.overtime.model.VodPlayback
 import fi.severi.overtime.model.GROUP_ALL
 import fi.severi.overtime.model.GROUP_FAVORITES
 import fi.severi.overtime.model.GroupEntry
@@ -22,6 +27,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -48,6 +54,15 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     val query = MutableStateFlow("")
     val currentChannel = MutableStateFlow<Channel?>(null)
+
+    /** The movie or episode playing, when it's on-demand rather than a channel. */
+    val currentVod = MutableStateFlow<VodPlayback?>(null)
+
+    /** Movies & series of Xtream sources. */
+    val library = LibraryModel(repo, scope, sources)
+
+    val hasLibrary: StateFlow<Boolean> = sources.map { list -> list.any { it.type == SourceType.XTREAM } }
+        .stateIn(scope, SharingStarted.Eagerly, sources.value.any { it.type == SourceType.XTREAM })
 
     /** Status text while something loads, null when idle. */
     val busy = MutableStateFlow<String?>(null)
@@ -177,7 +192,35 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     // ---- playback -------------------------------------------------------------
 
+    // ---- movies & series ----------------------------------------------------------
+
+    fun openLibrary() {
+        closeGuide()
+        library.open()
+    }
+
+    fun playMovie(item: LibraryItem) {
+        val source = library.source() ?: return
+        playVod(repo.movieUrl(source, item), VodPlayback(item.name, item.year, item.poster))
+    }
+
+    fun playEpisode(series: LibraryItem, season: Season, episode: Episode) {
+        val source = library.source() ?: return
+        val label = "S${season.number} E${episode.number}" + episode.title.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+        playVod(repo.episodeUrl(source, episode), VodPlayback(series.name, label, episode.image ?: series.poster))
+    }
+
+    /** On-demand files are seekable already, so they play directly without the rewind recorder. */
+    private fun playVod(url: String, playback: VodPlayback) {
+        currentChannel.value = null
+        currentVod.value = playback
+        val s = _settings.value
+        player.play(url, s.networkCachingMs, s.userAgent, rewindBufferMs = 0)
+        library.close()
+    }
+
     fun play(channel: Channel) {
+        currentVod.value = null
         currentChannel.value = channel
         // A channel picked from a search outside the current group makes its own group the one Left/Right steps through.
         if (channel.sourceId == selectedSourceId.value && channelsIn(selectedGroup.value).none { it.id == channel.id }) {

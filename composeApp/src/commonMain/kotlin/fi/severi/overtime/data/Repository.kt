@@ -3,6 +3,12 @@ package fi.severi.overtime.data
 import fi.severi.overtime.model.AppSettings
 import fi.severi.overtime.model.Channel
 import fi.severi.overtime.model.EpgData
+import fi.severi.overtime.model.Episode
+import fi.severi.overtime.model.LibraryCategory
+import fi.severi.overtime.model.LibraryItem
+import fi.severi.overtime.model.LibraryKind
+import fi.severi.overtime.model.MovieDetails
+import fi.severi.overtime.model.SeriesDetails
 import fi.severi.overtime.model.Source
 import fi.severi.overtime.model.SourceType
 import io.ktor.client.HttpClient
@@ -62,6 +68,24 @@ class Repository(private val store: FileStore) {
         store.writeText(guidesFile(source.id), playlist.guideUrls.joinToString("\n"))
         return playlist.channels
     }
+
+    // ---- movies & series (Xtream) -------------------------------------------
+
+    suspend fun libraryCategories(source: Source, kind: LibraryKind): List<LibraryCategory> =
+        withContext(Dispatchers.Default) { xtream.categories(source, kind) }
+
+    suspend fun libraryItems(source: Source, kind: LibraryKind, categoryId: String?): List<LibraryItem> =
+        withContext(Dispatchers.Default) { xtream.items(source, kind, categoryId) }
+
+    suspend fun movieDetails(source: Source, item: LibraryItem): MovieDetails =
+        withContext(Dispatchers.Default) { xtream.movieDetails(source, item) }
+
+    suspend fun seriesDetails(source: Source, item: LibraryItem): SeriesDetails =
+        withContext(Dispatchers.Default) { xtream.seriesDetails(source, item) }
+
+    fun movieUrl(source: Source, item: LibraryItem): String = xtream.movieUrl(source, item)
+
+    fun episodeUrl(source: Source, episode: Episode): String = xtream.episodeUrl(source, episode)
 
     // ---- EPG ----------------------------------------------------------------
 

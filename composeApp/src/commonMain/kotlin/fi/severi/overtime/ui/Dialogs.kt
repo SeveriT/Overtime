@@ -411,7 +411,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
         SectionHeader("Info")
         Text(
             "Shortcuts: ← → or Page Up/Down change channel · Shift+← → rewind / forward 10 s · End back to live · " +
-                "↑ ↓ volume · Space pause · M mute · S channel list · I stream info · G guide (← → move through time, Home now) · F or F11 fullscreen · Esc back / leave fullscreen",
+                "↑ ↓ volume · Space pause · M mute · S channel list · I stream info · G guide (← → move through time, Home now) · L movies & series (← → skip 10 s while a movie plays) · F or F11 fullscreen · Esc back / leave fullscreen",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

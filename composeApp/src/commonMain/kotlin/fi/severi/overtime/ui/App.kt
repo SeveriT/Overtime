@@ -35,6 +35,7 @@ fun App(vm: AppViewModel) {
         val fullscreen by vm.fullscreen.collectAsState()
         val sidebarVisible by vm.sidebarVisible.collectAsState()
         val guideVisible by vm.guideVisible.collectAsState()
+        val libraryVisible by vm.library.visible.collectAsState()
         var showSources by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 
@@ -42,7 +43,9 @@ fun App(vm: AppViewModel) {
         LaunchedEffect(sources.isEmpty()) { if (sources.isEmpty()) showSources = true }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            if (guideVisible) {
+            if (libraryVisible) {
+                LibraryScreen(vm)
+            } else if (guideVisible) {
                 GuideScreen(vm)
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
