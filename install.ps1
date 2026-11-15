@@ -1,5 +1,5 @@
 # Builds Overtime as a standalone app, installs it for the current user and
-# creates a desktop shortcut. Run again after changes to update the install.
+# creates desktop and Start Menu shortcuts. Run again after changes to update the install.
 #
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1
 
@@ -27,16 +27,25 @@ New-Item -ItemType Directory -Path (Split-Path $installDir) -Force | Out-Null
 Copy-Item $appImage $installDir -Recurse
 
 $exe = Join-Path $installDir 'Overtime.exe'
-$shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Overtime.lnk'
 $shell = New-Object -ComObject WScript.Shell
-$link = $shell.CreateShortcut($shortcut)
-$link.TargetPath = $exe
-$link.WorkingDirectory = $installDir
-$link.IconLocation = "$exe,0"
-$link.Description = 'Overtime IPTV player'
-$link.Save()
+
+function New-Shortcut([string] $path) {
+    $link = $shell.CreateShortcut($path)
+    $link.TargetPath = $exe
+    $link.WorkingDirectory = $installDir
+    $link.IconLocation = "$exe,0"
+    $link.Description = 'Overtime IPTV player'
+    $link.Save()
+}
+
+# Desktop, plus the per-user Start Menu so Overtime shows up in Windows search and can be pinned to Start.
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Overtime.lnk'
+$startMenuShortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'Overtime.lnk'
+New-Shortcut $desktopShortcut
+New-Shortcut $startMenuShortcut
 
 # Make Explorer pick up a changed app icon instead of showing the cached one.
 Start-Process -FilePath "$env:SystemRoot\System32\ie4uinit.exe" -ArgumentList '-show' -NoNewWindow -Wait -ErrorAction SilentlyContinue
 
-Write-Host "Done. Shortcut: $shortcut"
+Write-Host "Done. Shortcuts: $desktopShortcut"
+Write-Host "                 $startMenuShortcut"
