@@ -61,6 +61,8 @@ class Repository(private val store: FileStore) {
             SourceType.M3U_FILE -> rememberGuides(source, M3uParser.parsePlaylist(readLocalFile(source.url.trim()), source.id))
             SourceType.XTREAM -> xtream.liveChannels(source)
         }
+        // An error page or a provider hiccup parses as an empty list; don't let it wipe the saved channels.
+        if (channels.isEmpty() && cachedChannels(source.id).isNotEmpty()) error("the provider returned no channels")
         store.writeText(channelsFile(source.id), json.encodeToString(ListSerializer(Channel.serializer()), channels))
         channels
     }
@@ -136,6 +138,8 @@ class Repository(private val store: FileStore) {
                 }
             } catch (e: Exception) {
                 if (firstError == null) firstError = e
+                // Keep showing the last good copy of a guide that failed to download.
+                runCatching { store.readBytes(epgFile(source.id, index))?.let(::parseXmltv) }.getOrNull()?.let { merged += it }
             }
         }
         // Drop cached guides that are no longer listed.

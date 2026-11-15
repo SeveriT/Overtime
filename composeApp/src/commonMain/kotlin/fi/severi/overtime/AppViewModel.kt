@@ -21,6 +21,7 @@ import fi.severi.overtime.model.GroupSort
 import fi.severi.overtime.model.Programme
 import fi.severi.overtime.model.Source
 import fi.severi.overtime.player.VideoPlayer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -183,6 +184,9 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
                 val cached = repo.cachedEpg(source.id)
                 if (!cached.isEmpty) _epg.update { it + (source.id to cached) }
             }
+            // After the cached guide is in, so it can't overwrite the fresh one. Cached channels stay usable
+            // (and the last channel keeps playing) while this runs.
+            if (_settings.value.refreshOnLaunch) refreshAll(quiet = true)
         }
         // Resuming the last channel happens in the init block at the end of the class, once every
         // property play() touches has been initialised.
@@ -550,29 +554,41 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         if (selectedSourceId.value == id) selectedSourceId.value = _sources.value.firstOrNull()?.id
     }
 
-    fun refreshSource(id: String) {
+    /**
+     * Reloads a source's channels and guide. [quiet] (the refresh at launch) shows "Updating…" and, when
+     * there are cached channels to fall back on, keeps a failure out of the sidebar.
+     */
+    fun refreshSource(id: String, quiet: Boolean = false) {
         val source = _sources.value.firstOrNull { it.id == id } ?: return
         scope.launch {
             error.value = null
-            busy.value = "Loading channels for ${source.name}…"
+            busy.value = if (quiet) "Updating ${source.name}…" else "Loading channels for ${source.name}…"
             try {
                 val channels = repo.fetchChannels(source)
                 _channels.update { it + (source.id to channels) }
                 val guides = repo.epgUrlsFor(source).size
                 if (guides > 0) {
-                    busy.value = if (guides == 1) "Loading guide for ${source.name}…" else "Loading $guides guides for ${source.name}…"
+                    busy.value = when {
+                        quiet -> "Updating guide for ${source.name}…"
+                        guides == 1 -> "Loading guide for ${source.name}…"
+                        else -> "Loading $guides guides for ${source.name}…"
+                    }
                     val epg = repo.fetchEpg(source)
                     _epg.update { it + (source.id to epg) }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                error.value = "${source.name}: ${e.message ?: e::class.simpleName}"
+                if (!quiet || _channels.value[source.id].isNullOrEmpty()) {
+                    error.value = "${source.name}: ${e.message ?: e::class.simpleName}"
+                }
             } finally {
                 busy.value = null
             }
         }
     }
 
-    fun refreshAll() = _sources.value.forEach { refreshSource(it.id) }
+    fun refreshAll(quiet: Boolean = false) = _sources.value.forEach { refreshSource(it.id, quiet) }
 
     /** How many guides an M3U playlist's own header names (shown in the sources list). */
     fun playlistGuideCount(sourceId: String): Int = repo.playlistGuides(sourceId).size

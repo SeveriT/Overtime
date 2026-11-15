@@ -45,7 +45,7 @@ class StartupTest {
                 json.encodeToString(ListSerializer(Source.serializer()), listOf(Source("src", "Test", SourceType.M3U_URL, "http://example.invalid"))),
             )
             File(dir, "channels_src.json").writeText(json.encodeToString(ListSerializer(Channel.serializer()), listOf(channel)))
-            File(dir, "settings.json").writeText(json.encodeToString(AppSettings.serializer(), AppSettings(lastChannelId = channel.id, lastSourceId = "src")))
+            File(dir, "settings.json").writeText(json.encodeToString(AppSettings.serializer(), AppSettings(lastChannelId = channel.id, lastSourceId = "src", refreshOnLaunch = false)))
             System.setProperty("overtime.dataDir", dir.absolutePath)
 
             val player = FakePlayer()

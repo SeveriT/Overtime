@@ -109,6 +109,8 @@ data class AppSettings(
     /** Record live streams so they can be paused and rewound. */
     val rewindEnabled: Boolean = true,
     val rewindMinutes: Int = 5,
+    /** Reload every source's channels and guide in the background when the app opens. */
+    val refreshOnLaunch: Boolean = true,
     // Library poster cards
     val posterWidth: PosterWidth = PosterWidth.BALANCED,
     val posterCorners: PosterCorners = PosterCorners.CLASSIC,

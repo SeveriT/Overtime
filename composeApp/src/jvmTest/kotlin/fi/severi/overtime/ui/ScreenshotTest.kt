@@ -110,7 +110,7 @@ class ScreenshotTest {
         File(dir, "settings.json").writeText(
             json.encodeToString(
                 AppSettings.serializer(),
-                AppSettings(lastChannelId = playing.id, lastSourceId = "demo", favorites = setOf(playing.id, channels[0].id), volume = 70),
+                AppSettings(lastChannelId = playing.id, lastSourceId = "demo", favorites = setOf(playing.id, channels[0].id), volume = 70, refreshOnLaunch = false),
             ),
         )
         // A guide where every channel is 40% into an hour-long programme.

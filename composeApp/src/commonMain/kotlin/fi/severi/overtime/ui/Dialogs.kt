@@ -379,6 +379,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     var caching by remember { mutableStateOf(settings.networkCachingMs.toString()) }
     var groupSort by remember { mutableStateOf(settings.groupSort) }
     var rewindEnabled by remember { mutableStateOf(settings.rewindEnabled) }
+    var refreshOnLaunch by remember { mutableStateOf(settings.refreshOnLaunch) }
 
     // Colours preview live; closing without saving puts the originals back.
     val originalSidebar = remember { settings.sidebarColor }
@@ -408,6 +409,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                             networkCachingMs = caching.toIntOrNull()?.coerceIn(0, 60_000) ?: it.networkCachingMs,
                             groupSort = groupSort,
                             rewindEnabled = rewindEnabled,
+                            refreshOnLaunch = refreshOnLaunch,
                             posterWidth = posterWidth,
                             posterCorners = posterCorners,
                             landscapePosters = landscapePosters,
@@ -442,6 +444,12 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                 Text("Manage sources")
             }
         }
+        SwitchRow(
+            title = "Refresh when the app opens",
+            supporting = "Reloads channels and guides in the background at launch. The saved lists are used until it finishes.",
+            checked = refreshOnLaunch,
+            onCheckedChange = { refreshOnLaunch = it },
+        )
 
         SectionHeader("Appearance")
         FieldLabel("Accent colour")
