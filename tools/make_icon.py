@@ -139,8 +139,8 @@ def render(size):
     ImageDraw.Draw(img).rounded_rectangle([margin, margin, s - margin - 1, s - margin - 1], radius, fill=BACKGROUND)
 
     # Glyph box as a share of the icon. The symbol's own padding leaves the TV at ~83 % of the box, so
-    # 0.99 makes it nearly full width; small sizes stop at 1.04, the most that still clears the corners.
-    glyph_box = s * (1.04 if small else 0.99)
+    # 0.84 puts it at ~70 % of the icon width with breathing room; small sizes run a bit larger to stay legible.
+    glyph_box = s * (0.92 if small else 0.84)
     scale = glyph_box / 960
     offset = (s - glyph_box) / 2
 
