@@ -51,6 +51,8 @@ compose.desktop {
             description = "IPTV player"
             vendor = "Severi"
             windows {
+                // Regenerate with: python tools/make_icon.py
+                iconFile.set(project.file("icons/overtime.ico"))
                 menu = true
                 shortcut = true
                 upgradeUuid = "6f3a1c2e-0b7d-4a5e-9c41-2d8e7f1b3a90"

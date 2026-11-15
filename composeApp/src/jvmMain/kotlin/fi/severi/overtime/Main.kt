@@ -11,6 +11,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -27,8 +30,16 @@ import fi.severi.overtime.ui.App
 import fi.severi.overtime.ui.OvertimeColors
 import fi.severi.overtime.ui.OvertimeTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.jetbrains.skia.Image
+
+/** Window and taskbar icon; the exe and installer use composeApp/icons/overtime.ico. */
+private fun loadAppIcon(): Painter? = runCatching {
+    val bytes = object {}.javaClass.getResourceAsStream("/overtime_icon.png")!!.use { it.readBytes() }
+    BitmapPainter(Image.makeFromEncoded(bytes).toComposeImageBitmap())
+}.getOrNull()
 
 fun main() = application {
+    val appIcon = remember { loadAppIcon() }
     val playerResult = remember { runCatching { VlcPlayer() } }
     val vm = remember { playerResult.getOrNull()?.let { AppViewModel(Repository(FileStore()), it) } }
 
@@ -45,6 +56,7 @@ fun main() = application {
         },
         state = windowState,
         title = "Overtime",
+        icon = appIcon,
         onKeyEvent = { event ->
             if (event.type != KeyEventType.KeyDown || vm == null) return@Window false
             when (event.key) {

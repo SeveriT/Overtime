@@ -36,4 +36,7 @@ $link.IconLocation = "$exe,0"
 $link.Description = 'Overtime IPTV player'
 $link.Save()
 
+# Make Explorer pick up a changed app icon instead of showing the cached one.
+Start-Process -FilePath "$env:SystemRoot\System32\ie4uinit.exe" -ArgumentList '-show' -NoNewWindow -Wait -ErrorAction SilentlyContinue
+
 Write-Host "Done. Shortcut: $shortcut"
