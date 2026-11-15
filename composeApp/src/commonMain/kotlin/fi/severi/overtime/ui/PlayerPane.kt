@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -12,9 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.Fullscreen
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,12 +45,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fi.severi.overtime.AppViewModel
@@ -56,6 +62,7 @@ import fi.severi.overtime.player.VideoSurface
 import kotlinx.coroutines.delay
 
 private const val OVERLAY_TIMEOUT_MS = 3_000L
+private const val VOLUME_FLYOUT_MS = 1_500L
 
 @Composable
 fun PlayerPane(
@@ -74,8 +81,21 @@ fun PlayerPane(
     var overlayVisible by remember { mutableStateOf(true) }
     val keepVisible = channel == null || state.paused || state.error != null
 
-    // Keyboard volume or channel changes should reveal the controls just like moving the mouse.
-    LaunchedEffect(settings.volume, state.muted, channel?.id) { lastActivity = nowMillis() }
+    // Keyboard channel changes reveal the controls just like moving the mouse.
+    LaunchedEffect(channel?.id) { lastActivity = nowMillis() }
+
+    // Volume changes show a short Windows-style flyout instead of the full control bar.
+    var volumeFlyoutVisible by remember { mutableStateOf(false) }
+    var volumeInitialised by remember { mutableStateOf(false) }
+    LaunchedEffect(settings.volume, state.muted) {
+        if (!volumeInitialised) {
+            volumeInitialised = true
+            return@LaunchedEffect
+        }
+        volumeFlyoutVisible = true
+        delay(VOLUME_FLYOUT_MS)
+        volumeFlyoutVisible = false
+    }
 
     LaunchedEffect(lastActivity, keepVisible) {
         overlayVisible = true
@@ -111,6 +131,15 @@ fun PlayerPane(
             state.buffering != null && !state.playing -> Box(Modifier.align(Alignment.Center)) {
                 CircularProgressIndicator(color = Color.White)
             }
+        }
+
+        AnimatedVisibility(
+            visible = volumeFlyoutVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp),
+        ) {
+            VolumeFlyout(volume = settings.volume, muted = state.muted)
         }
 
         AnimatedVisibility(
@@ -195,6 +224,41 @@ fun PlayerPane(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun VolumeFlyout(volume: Int, muted: Boolean) {
+    val level = if (muted) 0 else volume
+    val icon = when {
+        muted || level == 0 -> Icons.AutoMirrored.Filled.VolumeOff
+        level < 50 -> Icons.AutoMirrored.Filled.VolumeDown
+        else -> Icons.AutoMirrored.Filled.VolumeUp
+    }
+    Row(
+        Modifier
+            .shadow(12.dp, RoundedCornerShape(10.dp))
+            .background(Color(0xFF2C2C2C), RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+        Box(Modifier.width(110.dp).height(4.dp).background(Color(0xFF6B6B6B), RoundedCornerShape(2.dp))) {
+            Box(
+                Modifier
+                    .fillMaxWidth(level / 100f)
+                    .height(4.dp)
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)),
+            )
+        }
+        Text(
+            level.toString(),
+            style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
+            color = Color.White,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(32.dp),
+        )
     }
 }
 
