@@ -89,17 +89,32 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     /** Sidebar during a movie or episode: hidden when each one starts; live TV keeps its own setting. */
     private val vodSidebar = MutableStateFlow(false)
 
-    val sidebarVisible: StateFlow<Boolean> = combine(fullscreen, fullscreenSidebar, _settings, currentVod, vodSidebar) { full, overlay, settings, vod, vodShown ->
+    /** A narrow window hides the sidebar on its own; S can still show it until the window widens again. */
+    private val narrowWindow = MutableStateFlow(false)
+    private val narrowSidebar = MutableStateFlow(false)
+
+    fun setNarrowWindow(narrow: Boolean) {
+        if (narrow && !narrowWindow.value) narrowSidebar.value = false
+        narrowWindow.value = narrow
+    }
+
+    /** Fullscreen or a narrow window decide on their own; otherwise null. */
+    private val sidebarOverride = combine(fullscreen, fullscreenSidebar, narrowWindow, narrowSidebar) { full, overlay, narrow, narrowShown ->
         when {
             full -> overlay
-            vod != null -> vodShown
-            else -> settings.sidebarVisible
+            narrow -> narrowShown
+            else -> null
         }
+    }
+
+    val sidebarVisible: StateFlow<Boolean> = combine(sidebarOverride, _settings, currentVod, vodSidebar) { override, settings, vod, vodShown ->
+        override ?: if (vod != null) vodShown else settings.sidebarVisible
     }.stateIn(scope, SharingStarted.Eagerly, _settings.value.sidebarVisible)
 
     fun toggleSidebar() {
         when {
             fullscreen.value -> fullscreenSidebar.update { !it }
+            narrowWindow.value -> narrowSidebar.update { !it }
             currentVod.value != null -> vodSidebar.update { !it }
             else -> updateSettings { it.copy(sidebarVisible = !it.sidebarVisible) }
         }

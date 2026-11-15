@@ -29,6 +29,9 @@ import okio.Path.Companion.toPath
 /** Sidebar width limits; the default is the M3 standard navigation drawer width. */
 private const val SIDEBAR_MIN_DP = 280f
 private const val SIDEBAR_MAX_DP = 720f
+
+/** Below this window width the sidebar hides automatically. */
+private val NARROW_WINDOW = 1000.dp
 private const val SIDEBAR_MAX_SHARE = 0.6f
 private val DEFAULT_SIDEBAR_DP = AppSettings().sidebarWidth.toFloat()
 private const val IMAGE_CACHE_BYTES = 300L * 1024 * 1024
@@ -68,6 +71,8 @@ fun App(vm: AppViewModel) {
                 GuideScreen(vm)
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val narrow = maxWidth < NARROW_WINDOW
+                    LaunchedEffect(narrow) { vm.setNarrowWindow(narrow) }
                     val density = LocalDensity.current
                     val maxSidebar = minOf(SIDEBAR_MAX_DP, with(density) { maxWidth.value } * SIDEBAR_MAX_SHARE)
                         .coerceAtLeast(SIDEBAR_MIN_DP)
