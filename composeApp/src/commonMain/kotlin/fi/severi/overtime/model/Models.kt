@@ -1,6 +1,8 @@
 package fi.severi.overtime.model
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNames
 
 enum class SourceType(val label: String) {
     M3U_URL("M3U playlist URL"),
@@ -112,7 +114,7 @@ data class AppSettings(
     /** Reload every source's channels and guide in the background when the app opens. */
     val refreshOnLaunch: Boolean = true,
     // Library poster cards
-    val posterWidth: PosterWidth = PosterWidth.BALANCED,
+    val posterWidth: PosterWidth = PosterWidth.MEDIUM,
     val posterCorners: PosterCorners = PosterCorners.CLASSIC,
     val landscapePosters: Boolean = false,
     val hidePosterLabels: Boolean = false,
@@ -180,13 +182,16 @@ enum class SubtitleEdge(val label: String) {
 data class WindowBounds(val x: Int, val y: Int, val width: Int, val height: Int, val maximized: Boolean = false)
 
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 enum class PosterWidth(val label: String, val dp: Int) {
-    COMPACT("Compact", 100),
-    DENSE("Dense", 120),
-    STANDARD("Standard", 140),
-    BALANCED("Balanced", 160),
-    COMFORT("Comfort", 180),
-    LARGE("Large", 200),
+    // Older versions had six sizes; their saved names map to the nearest of these.
+    @JsonNames("COMPACT", "DENSE", "STANDARD")
+    SMALL("Small", 150),
+
+    @JsonNames("BALANCED", "COMFORT")
+    MEDIUM("Medium", 180),
+
+    LARGE("Large", 220),
 }
 
 @Serializable

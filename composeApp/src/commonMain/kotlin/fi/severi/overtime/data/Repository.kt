@@ -23,7 +23,9 @@ import kotlinx.serialization.json.Json
 
 /** Loads, caches and persists sources, channel lists and EPG data. */
 class Repository(private val store: FileStore) {
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
+    // coerceInputValues: a value this version doesn't know (e.g. a removed option) falls back to its default
+    // instead of failing the whole settings file.
+    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true; coerceInputValues = true }
     private var client: HttpClient = createHttpClient(loadSettings().userAgent)
     private var xtream = XtreamApi(client, json)
 
