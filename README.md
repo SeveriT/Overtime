@@ -6,7 +6,8 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 
 ### Live TV
 - M3U / M3U8 playlists (URL or local file) and Xtream Codes logins
-- Channel groups, search and favourites
+- Channel groups, search and favourite channels
+- Favourite groups pinned to the top of the group list
 - Live rewind: pause and rewind up to 5 minutes
 - Automatic channel and guide refresh
 
