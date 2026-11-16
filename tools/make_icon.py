@@ -110,6 +110,7 @@ def parse_path(d):
 
 
 VIEWBOX = 24  # the glyph is drawn in a 24 x 24 box
+SCREEN_CENTRE_Y = 14  # middle of the TV's screen in glyph units
 
 
 def load_symbol():
@@ -118,12 +119,12 @@ def load_symbol():
 
 
 
-def _mask(polygons, size, scale, offset):
+def _mask(polygons, size, scale, offset, offset_y):
     """Even-odd fill: XOR of every polygon, which keeps the screen hollow and the triangle solid."""
     mask = Image.new("1", (size, size), 0)
     for poly in polygons:
         layer = Image.new("1", (size, size), 0)
-        pts = [(offset + px * scale, offset + py * scale) for px, py in poly]
+        pts = [(offset + px * scale, offset_y + py * scale) for px, py in poly]
         ImageDraw.Draw(layer).polygon(pts, fill=1)
         mask = ImageChops.logical_xor(mask, layer)
     return mask.convert("L")
@@ -146,9 +147,11 @@ def render(size):
     glyph_box = s * (0.80 if small else 0.72)
     scale = glyph_box / VIEWBOX
     offset = (s - glyph_box) / 2
+    # Centre the TV's screen (y 6..22 of the glyph), not the whole glyph: the antennas would push it low.
+    offset_y = s / 2 - SCREEN_CENTRE_Y * scale
 
     polygons = load_symbol()
-    img.paste(Image.new("RGBA", (s, s), GLYPH + (255,)), (0, 0), _mask(polygons, s, scale, offset))
+    img.paste(Image.new("RGBA", (s, s), GLYPH + (255,)), (0, 0), _mask(polygons, s, scale, offset, offset_y))
     return img.resize((size, size), Image.LANCZOS)
 
 
