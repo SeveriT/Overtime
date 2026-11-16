@@ -81,7 +81,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
@@ -208,9 +207,9 @@ fun PlayerPane(
             )
         }
 
-        // During the end credits: the next episode in the lower right corner, lifted above the controls
-        // while they show so it never covers them.
-        val upNextLift by animateDpAsState(if (overlayVisible) toolbarHeight + TOOLBAR_BOTTOM_GAP else 0.dp)
+        // During the end credits: the next episode in the lower right corner, always just above where the
+        // controls sit, so it stays put whether they're showing or not.
+        val upNextLift = toolbarHeight + TOOLBAR_BOTTOM_GAP
         AnimatedVisibility(
             visible = upNextEntry != null && countdown != null,
             enter = fadeIn() + scaleIn(initialScale = 0.95f),
