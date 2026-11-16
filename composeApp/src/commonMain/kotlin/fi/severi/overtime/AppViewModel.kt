@@ -460,9 +460,25 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     /** The episode after the one playing, for the Next episode button and autoplay; null for movies and finales. */
     val upNext = MutableStateFlow<WatchProgress?>(null)
 
-    /** Seconds until the next episode starts on its own, while counting down after an episode ended. */
-    val autoplayCountdown = MutableStateFlow<Int?>(null)
-    private var autoplayJob: Job? = null
+    /** Up next was dismissed for this episode: no card, and no autoplay when it ends. */
+    private val upNextDismissed = MutableStateFlow(false)
+
+    /**
+     * Seconds left in the episode while it's in its last [AppSettings.upNextLead] (about when the end
+     * credits start): the Up next card shows meanwhile. Null otherwise. The streams carry no credit
+     * markers, so it goes by the time left.
+     */
+    val upNextCountdown: StateFlow<Int?> = combine(player.state, upNext, upNextDismissed, _settings) { state, next, dismissed, settings ->
+        val media = state.media
+        val leadMs = settings.upNextLead.seconds * 1_000L
+        when {
+            next == null || dismissed || media == null || state.ended -> null
+            // Too short for a credits window to make sense (e.g. a trailer-length file).
+            media.durationMs < leadMs * 3 -> null
+            media.durationMs - media.positionMs > leadMs -> null
+            else -> ((media.durationMs - media.positionMs + 999) / 1_000).toInt()
+        }
+    }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, null)
 
     /** Plays the episode after the current one, from where it was left off if it was started before. */
     fun playNextEpisode() {
@@ -479,32 +495,23 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         }
     }
 
-    fun cancelAutoplay() {
-        autoplayJob?.cancel()
-        autoplayJob = null
-        autoplayCountdown.value = null
-    }
-
-    private fun startAutoplayCountdown() {
-        autoplayJob?.cancel()
-        autoplayJob = scope.launch {
-            for (seconds in AUTOPLAY_SECONDS downTo 1) {
-                autoplayCountdown.value = seconds
-                delay(1_000)
-            }
-            autoplayCountdown.value = null
-            playNextEpisode()
-        }
+    /** Hides Up next for this episode and lets it play out without starting the next one. */
+    fun dismissUpNext() {
+        upNextDismissed.value = true
     }
 
     init {
-        // An episode that plays to the end counts down to the next one; playing it again cancels that.
+        // Seeking back out of the credits brings Up next back.
+        scope.launch {
+            combine(player.state, _settings) { state, settings ->
+                val media = state.media ?: return@combine false
+                media.durationMs - media.positionMs > settings.upNextLead.seconds * 1_000L + UP_NEXT_REARM_MS
+            }.distinctUntilChanged().collect { beforeCredits -> if (beforeCredits) upNextDismissed.value = false }
+        }
+        // An episode that plays to the end goes straight on to the next one (Up next counted down already).
         scope.launch {
             player.state.map { it.ended }.distinctUntilChanged().collect { ended ->
-                when {
-                    !ended -> cancelAutoplay()
-                    upNext.value != null && _settings.value.autoplayNext -> startAutoplayCountdown()
-                }
+                if (ended && upNext.value != null && !upNextDismissed.value && _settings.value.autoplayNext) playNextEpisode()
             }
         }
     }
@@ -530,7 +537,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         awaitingStart = true
         playingEntry = entry
         nextEpisode = next
-        cancelAutoplay()
+        upNextDismissed.value = false
         upNext.value = next
         library.close()
     }
@@ -576,7 +583,6 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         playingEntry = null
         nextEpisode = null
         upNext.value = null
-        cancelAutoplay()
     }
 
     fun play(channel: Channel) {
@@ -793,8 +799,8 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         /** How often the playing title's position is written to disk. */
         const val PROGRESS_SAVE_MS = 10_000L
 
-        /** Countdown before the next episode starts on its own. */
-        const val AUTOPLAY_SECONDS = 10
+        /** How far before the Up next window a seek must land to show the card again after Cancel. */
+        const val UP_NEXT_REARM_MS = 5_000L
 
         /** Settings changes are collected this long before writing. */
         const val SETTINGS_SAVE_DELAY_MS = 300L

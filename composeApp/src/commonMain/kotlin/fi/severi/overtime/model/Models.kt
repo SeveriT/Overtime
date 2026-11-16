@@ -113,8 +113,10 @@ data class AppSettings(
     val rewindMinutes: Int = 5,
     /** Reload every source's channels and guide in the background when the app opens. */
     val refreshOnLaunch: Boolean = true,
-    /** Start the next episode a few seconds after one ends. */
+    /** Start the next episode as soon as one ends. */
     val autoplayNext: Boolean = true,
+    /** Up next appears this long before an episode ends, roughly when its end credits start. */
+    val upNextLead: UpNextLead = UpNextLead.S45,
     // Library poster cards
     val posterWidth: PosterWidth = PosterWidth.LARGE,
     val posterCorners: PosterCorners = PosterCorners.CLASSIC,
@@ -180,6 +182,14 @@ enum class SubtitleEdge(val label: String) {
     OUTLINE("Outline"),
     SHADOW("Drop shadow"),
     BOX("Background box"),
+}
+
+@Serializable
+enum class UpNextLead(val label: String, val seconds: Int) {
+    S30("30 s", 30),
+    S45("45 s", 45),
+    S60("60 s", 60),
+    S90("90 s", 90),
 }
 
 @Serializable

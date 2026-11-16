@@ -71,6 +71,7 @@ import fi.severi.overtime.data.nowMillis
 import fi.severi.overtime.model.GroupSort
 import fi.severi.overtime.model.Source
 import fi.severi.overtime.model.SourceType
+import fi.severi.overtime.model.UpNextLead
 
 /** M3 dialog: extra-large corners, high container tone, scrollable body with fixed action row. */
 @Composable
@@ -395,6 +396,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     var rewindEnabled by remember { mutableStateOf(settings.rewindEnabled) }
     var refreshOnLaunch by remember { mutableStateOf(settings.refreshOnLaunch) }
     var autoplayNext by remember { mutableStateOf(settings.autoplayNext) }
+    var upNextLead by remember { mutableStateOf(settings.upNextLead) }
     var subtitles by remember { mutableStateOf(settings.subtitles) }
 
     // Colours preview live; closing without saving puts the originals back.
@@ -428,6 +430,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                             rewindEnabled = rewindEnabled,
                             refreshOnLaunch = refreshOnLaunch,
                             autoplayNext = autoplayNext,
+                            upNextLead = upNextLead,
                             subtitles = subtitles,
                             posterWidth = posterWidth,
                             posterCorners = posterCorners,
@@ -505,10 +508,12 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
             )
             SwitchRow(
                 title = "Autoplay next episode",
-                supporting = "When an episode ends, the next one starts after a 10-second countdown you can skip or cancel.",
+                supporting = "The next episode starts as soon as one ends, unless you cancel Up next.",
                 checked = autoplayNext,
                 onCheckedChange = { autoplayNext = it },
             )
+            FieldLabel("Show Up next before the end (about when the credits start)")
+            ChipChoice(UpNextLead.entries, upNextLead, { it.label }) { upNextLead = it }
             OutlinedTextField(userAgent, { userAgent = it }, label = { Text("HTTP user agent") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(
                 caching, { caching = it.filter(Char::isDigit) },

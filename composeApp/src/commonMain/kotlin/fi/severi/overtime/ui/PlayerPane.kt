@@ -131,7 +131,8 @@ fun PlayerPane(
     val settings by vm.settings.collectAsState()
     val volume by vm.volume.collectAsState()
     val upNextEntry by vm.upNext.collectAsState()
-    val countdown by vm.autoplayCountdown.collectAsState()
+    val countdown by vm.upNextCountdown.collectAsState()
+    val autoplay = settings.autoplayNext
     val clock by vm.clock.collectAsState()
     val hasContent = channel != null || vod != null
 
@@ -193,19 +194,35 @@ fun PlayerPane(
 
         when {
             !hasContent -> CenterMessage("Pick a channel from the list")
-            state.ended && upNextEntry != null && countdown != null -> UpNextCard(
-                next = upNextEntry!!,
-                seconds = countdown!!,
-                onPlay = vm::playNextEpisode,
-                onCancel = vm::cancelAutoplay,
-                modifier = Modifier.align(Alignment.Center),
-            )
             state.ended && upNextEntry != null -> CenterMessage("Finished · press play to watch again, or N for the next episode")
             state.ended -> CenterMessage("Finished · press play to watch again")
             state.error != null -> CenterMessage(state.error!!, isError = true)
             state.buffering != null && !state.playing -> ContainedLoadingIndicator(
                 Modifier.align(Alignment.Center).size(72.dp),
             )
+        }
+
+        // During the end credits: the next episode on the right, clear of the title and the controls.
+        AnimatedVisibility(
+            visible = upNextEntry != null && countdown != null,
+            enter = fadeIn() + scaleIn(initialScale = 0.95f),
+            exit = fadeOut() + scaleOut(targetScale = 0.95f),
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            // Holds the last values while fading out.
+            val shownNext = remember { mutableStateOf(upNextEntry) }
+            val shownSeconds = remember { mutableStateOf(countdown) }
+            upNextEntry?.let { shownNext.value = it }
+            countdown?.let { shownSeconds.value = it }
+            shownNext.value?.let { next ->
+                UpNextCard(
+                    next = next,
+                    seconds = shownSeconds.value ?: 0,
+                    autoplay = autoplay,
+                    onPlay = vm::playNextEpisode,
+                    onCancel = vm::dismissUpNext,
+                )
+            }
         }
 
         AnimatedVisibility(
@@ -542,9 +559,16 @@ private fun ToolbarButtons(
 /** Below this player width the toolbar buttons wrap onto two rows. */
 private val COMPACT_TOOLBAR_WIDTH = 904.dp
 
-/** After an episode ends: the next one with a countdown, Play now and Cancel. */
+/** In the end credits: the next episode, the time until it starts (with autoplay), Play now and Cancel. */
 @Composable
-private fun UpNextCard(next: WatchProgress, seconds: Int, onPlay: () -> Unit, onCancel: () -> Unit, modifier: Modifier = Modifier) {
+private fun UpNextCard(
+    next: WatchProgress,
+    seconds: Int,
+    autoplay: Boolean,
+    onPlay: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
@@ -563,11 +587,13 @@ private fun UpNextCard(next: WatchProgress, seconds: Int, onPlay: () -> Unit, on
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    "Starting in $seconds s",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (autoplay) {
+                    Text(
+                        "Starting in $seconds s",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = onPlay, shapes = ButtonDefaults.shapes()) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
