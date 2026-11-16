@@ -134,6 +134,8 @@ data class AppSettings(
     val subtitles: SubtitleStyle = SubtitleStyle(),
     /** Subtitles to turn on for movies and episodes when the file has them; null leaves VLC's choice. */
     val subtitleLanguage: SubtitleLanguage? = null,
+    /** Folders of the user's own movies and series (Movies & series > Local files). */
+    val localFolders: List<String> = emptyList(),
     /** Keyboard shortcuts the user changed, by Shortcut name; anything missing uses the default keys. */
     val shortcuts: Map<String, List<KeyCombo>> = emptyMap(),
     val picture: PictureAdjust = PictureAdjust(),

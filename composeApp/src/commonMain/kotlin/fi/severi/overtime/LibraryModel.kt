@@ -8,7 +8,13 @@ import fi.severi.overtime.model.MovieDetails
 import fi.severi.overtime.model.SeriesDetails
 import fi.severi.overtime.model.Source
 import fi.severi.overtime.model.SourceType
+import fi.severi.overtime.data.LOCAL_SOURCE
+import fi.severi.overtime.data.LocalIndex
+import fi.severi.overtime.data.LocalLibraryParser
+import fi.severi.overtime.data.scanLocalFolders
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,8 +34,17 @@ class LibraryModel(
     private val repo: Repository,
     private val scope: CoroutineScope,
     private val sources: StateFlow<List<Source>>,
+    private val localFolders: () -> List<String>,
 ) {
     val visible = MutableStateFlow(false)
+
+    /** Showing the user's own files instead of a provider's movies or series. */
+    val localMode = MutableStateFlow(false)
+
+    /** The scanned local collection; null until the first scan. */
+    val localIndex = MutableStateFlow<LocalIndex?>(null)
+    val localScanning = MutableStateFlow(false)
+    private var scanJob: Job? = null
     val kind = MutableStateFlow(LibraryKind.MOVIES)
     val sourceId = MutableStateFlow<String?>(null)
     val categories = MutableStateFlow<List<LibraryCategory>>(emptyList())
@@ -70,8 +85,44 @@ class LibraryModel(
             sourceId.value = xtreamSources.firstOrNull()?.id
             resetLists()
         }
+        // Without a provider, the library is just the local files.
+        if (xtreamSources.isEmpty()) localMode.value = true
         visible.value = true
-        if (categories.value.isEmpty()) loadCategories()
+        if (localMode.value) {
+            if (localIndex.value == null) scanLocal()
+        } else if (categories.value.isEmpty()) {
+            loadCategories()
+        }
+    }
+
+    fun showLocal() {
+        if (localMode.value) return
+        localMode.value = true
+        query.value = ""
+        searchResults.value = emptyList()
+        deselect()
+        if (localIndex.value == null) scanLocal()
+    }
+
+    /** Re-reads the local folders (after adding or removing one, or on Rescan). */
+    fun scanLocal() {
+        scanJob?.cancel()
+        scanJob = scope.launch {
+            localScanning.value = true
+            try {
+                localIndex.value = scanIndex()
+                if (query.value.isNotBlank()) search(query.value)
+            } finally {
+                localScanning.value = false
+            }
+        }
+    }
+
+    /** The local collection, scanning first if that hasn't happened yet. */
+    suspend fun ensureLocalIndex(): LocalIndex = localIndex.value ?: scanIndex().also { localIndex.value = it }
+
+    private suspend fun scanIndex(): LocalIndex = withContext(Dispatchers.Default) {
+        LocalLibraryParser.parse(runCatching { scanLocalFolders(localFolders()) }.getOrDefault(emptyList()))
     }
 
     fun close() {
@@ -79,7 +130,8 @@ class LibraryModel(
     }
 
     fun setKind(newKind: LibraryKind) {
-        if (kind.value == newKind) return
+        if (kind.value == newKind && !localMode.value) return
+        localMode.value = false
         kind.value = newKind
         resetLists()
         loadCategories()
@@ -133,6 +185,11 @@ class LibraryModel(
             searchResults.value = emptyList()
             return
         }
+        if (localMode.value) {
+            val index = localIndex.value ?: return
+            searchResults.value = filter(index.shows.map { it.first } + index.movies, q)
+            return
+        }
         val source = source() ?: return
         val key = Triple(source.id, kind.value, null)
         val all = itemCache[key]
@@ -154,6 +211,23 @@ class LibraryModel(
         selected.value = item
         movieDetails.value = null
         seriesDetails.value = null
+        if (item.categoryId == LOCAL_SOURCE) {
+            // Everything known about a local title is in the index already.
+            detailsJob?.cancel()
+            detailsJob = scope.launch {
+                val index = ensureLocalIndex()
+                if (selected.value?.id != item.id) return@launch
+                if (item.kind == LibraryKind.MOVIES) {
+                    movieDetails.value = MovieDetails(
+                        plot = null, genre = null, cast = null, director = null, releaseDate = item.year,
+                        duration = null, backdrop = item.backdrop,
+                    )
+                } else {
+                    seriesDetails.value = index.show(item.id)
+                }
+            }
+            return
+        }
         val source = source() ?: return
         detailsJob?.cancel()
         detailsJob = scope.launch {

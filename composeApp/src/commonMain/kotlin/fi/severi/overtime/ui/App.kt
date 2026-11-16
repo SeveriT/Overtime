@@ -61,8 +61,10 @@ fun App(vm: AppViewModel) {
         var showSources by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 
-        // First launch: nothing configured yet, open the sources dialog straight away.
-        LaunchedEffect(sources.isEmpty()) { if (sources.isEmpty()) showSources = true }
+        // First launch: nothing configured yet, open the sources dialog straight away. Someone who only
+        // watches their own files (local folders, no playlists) isn't asked every time.
+        val nothingSetUp = sources.isEmpty() && settings.localFolders.isEmpty()
+        LaunchedEffect(nothingSetUp) { if (nothingSetUp) showSources = true }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             if (libraryVisible) {

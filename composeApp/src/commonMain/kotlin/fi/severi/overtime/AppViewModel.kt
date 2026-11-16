@@ -1,5 +1,6 @@
 package fi.severi.overtime
 
+import fi.severi.overtime.data.LOCAL_SOURCE
 import fi.severi.overtime.data.Repository
 import fi.severi.overtime.data.nowMillis
 import fi.severi.overtime.model.PictureAdjust
@@ -104,9 +105,10 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     val streamUrl = MutableStateFlow<String?>(null)
 
     /** Movies & series of Xtream sources. */
-    val library = LibraryModel(repo, scope, sources)
+    val library = LibraryModel(repo, scope, sources, localFolders = { _settings.value.localFolders })
 
-    val hasLibrary: StateFlow<Boolean> = sources.map { list -> list.any { it.type == SourceType.XTREAM } }
+    // Local files make the library useful even without an Xtream login.
+    val hasLibrary: StateFlow<Boolean> = sources.map { true }
         .stateIn(scope, SharingStarted.Eagerly, sources.value.any { it.type == SourceType.XTREAM })
 
     /** Status text while something loads, null when idle. */
@@ -354,10 +356,12 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     }
 
     fun playMovie(item: LibraryItem, details: MovieDetails? = null, fromStart: Boolean = false) {
-        val source = library.source() ?: return
+        val local = item.categoryId == LOCAL_SOURCE
+        val source = if (local) null else library.source() ?: return
+        val sourceId = source?.id ?: LOCAL_SOURCE
         val entry = WatchProgress(
-            key = "m:${source.id}:${item.id}",
-            sourceId = source.id,
+            key = "m:$sourceId:${item.id}",
+            sourceId = sourceId,
             kind = LibraryKind.MOVIES,
             itemId = item.id,
             title = item.name,
@@ -370,20 +374,30 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
             tmdbId = item.tmdbId ?: details?.tmdbId,
             imdbId = item.imdbId ?: details?.imdbId,
         )
-        startVod(repo.movieUrl(source, item), VodPlayback(item.name, item.year, item.poster), entry, next = null, fromStart = fromStart)
-        vodContext.value = VodContext(source.id, item, movie = details).also(::loadVodDetails)
+        // A local movie's id is its file path, which VLC plays as is.
+        val url = if (source == null) item.id else repo.movieUrl(source, item)
+        startVod(url, VodPlayback(item.name, item.year, item.poster), entry, next = null, fromStart = fromStart)
+        vodContext.value = VodContext(sourceId, item, movie = details).also(::loadVodDetails)
     }
 
     fun playEpisode(series: LibraryItem, details: SeriesDetails, season: Season, episode: Episode) {
-        val source = library.source() ?: return
-        val entry = episodeEntry(source.id, series, details, season, episode)
-        val next = nextEpisodeAfter(details, season, episode)?.let { (s, e) -> episodeEntry(source.id, series, details, s, e) }
-        startVod(repo.episodeUrl(source, episode), episodePlayback(entry), entry, next)
-        vodContext.value = VodContext(source.id, series, series = details, episodeId = episode.id, season = season.number)
+        val local = series.categoryId == LOCAL_SOURCE
+        val source = if (local) null else library.source() ?: return
+        val sourceId = source?.id ?: LOCAL_SOURCE
+        val entry = episodeEntry(sourceId, series, details, season, episode)
+        val next = nextEpisodeAfter(details, season, episode)?.let { (s, e) -> episodeEntry(sourceId, series, details, s, e) }
+        // A local episode's id is its file path.
+        val url = if (source == null) episode.id else repo.episodeUrl(source, episode)
+        startVod(url, episodePlayback(entry), entry, next)
+        vodContext.value = VodContext(sourceId, series, series = details, episodeId = episode.id, season = season.number)
     }
 
     /** Plays a Continue watching card: resumes where it stopped, or starts a queued next episode. */
     fun resume(entry: WatchProgress) {
+        if (entry.sourceId == LOCAL_SOURCE) {
+            resumeLocal(entry)
+            return
+        }
         val source = _sources.value.firstOrNull { it.id == entry.sourceId } ?: return
         if (entry.episodeId == null) {
             val item = LibraryItem(
@@ -418,11 +432,42 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     /** Removes a card from Continue watching (a series disappears until watched again). */
     fun forget(entry: WatchProgress) = history.dismiss(entry.key)
 
+    /** A local movie or episode from Continue watching: found again in the scanned folders. */
+    private fun resumeLocal(entry: WatchProgress) {
+        if (entry.episodeId == null) {
+            val item = LibraryItem(
+                entry.itemId, LibraryKind.MOVIES, entry.title, entry.poster, null, null, LOCAL_SOURCE, entry.extension,
+                backdrop = entry.backdrop,
+            )
+            playMovie(item, MovieDetails(null, null, null, null, null, null, entry.backdrop))
+            return
+        }
+        scope.launch {
+            val index = library.ensureLocalIndex()
+            val show = index.shows.firstOrNull { it.first.id == entry.itemId } ?: return@launch
+            val season = show.second.seasons.firstOrNull { it.number == entry.season } ?: return@launch
+            val episode = season.episodes.firstOrNull { it.id == entry.episodeId } ?: return@launch
+            playEpisode(show.first, show.second, season, episode)
+        }
+    }
+
+    fun addLocalFolder(path: String) {
+        if (path in _settings.value.localFolders) return
+        updateSettings { it.copy(localFolders = it.localFolders + path) }
+        library.scanLocal()
+    }
+
+    fun removeLocalFolder(path: String) {
+        updateSettings { it.copy(localFolders = it.localFolders - path) }
+        library.scanLocal()
+    }
+
     /** A finished series card opens the series, to pick what to watch next. */
     fun openSeries(entry: WatchProgress) {
         library.select(
             LibraryItem(
-                entry.itemId, LibraryKind.SERIES, entry.title, entry.poster, null, null, "", null,
+                entry.itemId, LibraryKind.SERIES, entry.title, entry.poster, null, null,
+                if (entry.sourceId == LOCAL_SOURCE) LOCAL_SOURCE else "", null,
                 tmdbId = entry.tmdbId, imdbId = entry.imdbId, backdrop = entry.backdrop,
             ),
         )
@@ -506,7 +551,8 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         val season = details?.seasons?.firstOrNull { it.number == next.season }
         val episode = season?.episodes?.firstOrNull { it.id == next.episodeId }
         // With the episode list already loaded, play it directly; otherwise as a Continue watching entry.
-        if (context != null && details != null && season != null && episode != null && library.source()?.id == context.sourceId) {
+        val sameSource = context?.sourceId == LOCAL_SOURCE || library.source()?.id == context?.sourceId
+        if (context != null && details != null && season != null && episode != null && sameSource) {
             playEpisode(context.item, details, season, episode)
         } else {
             resume(next)

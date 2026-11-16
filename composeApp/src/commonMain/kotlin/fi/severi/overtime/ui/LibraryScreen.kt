@@ -25,6 +25,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.InputChip
+import fi.severi.overtime.data.pickFolder
+import fi.severi.overtime.data.LOCAL_SOURCE
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -152,13 +161,17 @@ fun LibraryScreen(vm: AppViewModel) {
         history.filter { it.episodeId == null }.associate { it.key to it }
     }
     val sourceId by library.sourceId.collectAsState()
-    fun progressOf(item: LibraryItem): WatchProgress? =
-        if (item.kind == LibraryKind.MOVIES) movieProgress["m:$sourceId:${item.id}"] else null
+    fun progressOf(item: LibraryItem): WatchProgress? {
+        if (item.kind != LibraryKind.MOVIES) return null
+        val source = if (item.categoryId == LOCAL_SOURCE) LOCAL_SOURCE else sourceId
+        return movieProgress["m:$source:${item.id}"]
+    }
+    val localMode by library.localMode.collectAsState()
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Row(Modifier.fillMaxSize()) {
             Column(Modifier.weight(1f).fillMaxHeight()) {
-                LibraryTopBar(vm, kind, query)
+                LibraryTopBar(vm, kind, localMode, query)
                 if (loading != null || error != null) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
@@ -175,6 +188,7 @@ fun LibraryScreen(vm: AppViewModel) {
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when {
+                        localMode -> LocalLibrary(vm, style, query, results, continueWatching, selected, ::progressOf)
                         query.isNotBlank() -> when {
                             results.isNotEmpty() -> PosterGrid(results, style, selected, ::progressOf, library::select, "search/$kind/$query")
                             loading == null -> LibraryEmpty("Nothing matches “$query”.")
@@ -222,8 +236,10 @@ fun LibraryScreen(vm: AppViewModel) {
     }
 }
 
+private enum class LibraryTab(val label: String) { MOVIES("Movies"), SERIES("Series"), LOCAL("Local files") }
+
 @Composable
-private fun LibraryTopBar(vm: AppViewModel, kind: LibraryKind, query: String) {
+private fun LibraryTopBar(vm: AppViewModel, kind: LibraryKind, localMode: Boolean, query: String) {
     val library = vm.library
     val sourceId by library.sourceId.collectAsState()
     val sources by vm.sources.collectAsState()
@@ -239,14 +255,22 @@ private fun LibraryTopBar(vm: AppViewModel, kind: LibraryKind, query: String) {
             }
         }
         Text("Movies & series", style = MaterialTheme.typography.titleLargeEmphasized)
+        // Without a provider there's only the local collection.
+        val tabs = if (xtream.isEmpty()) listOf(LibraryTab.LOCAL) else LibraryTab.entries
         ConnectedChoiceGroup(
-            options = LibraryKind.entries,
-            selected = kind,
+            options = tabs,
+            selected = if (localMode) LibraryTab.LOCAL else if (kind == LibraryKind.MOVIES) LibraryTab.MOVIES else LibraryTab.SERIES,
             label = { it.label },
-            onSelect = library::setKind,
-            modifier = Modifier.width(240.dp),
+            onSelect = { tab ->
+                when (tab) {
+                    LibraryTab.LOCAL -> library.showLocal()
+                    LibraryTab.MOVIES -> library.setKind(LibraryKind.MOVIES)
+                    LibraryTab.SERIES -> library.setKind(LibraryKind.SERIES)
+                }
+            },
+            modifier = Modifier.width(if (tabs.size == 1) 140.dp else 380.dp),
         )
-        if (xtream.size > 1) {
+        if (xtream.size > 1 && !localMode) {
             var open by remember { mutableStateOf(false) }
             Box {
                 FilledTonalButton(onClick = { open = true }, shapes = ButtonDefaults.shapes()) {
@@ -264,9 +288,152 @@ private fun LibraryTopBar(vm: AppViewModel, kind: LibraryKind, query: String) {
         PillSearchField(
             value = query,
             onValueChange = library::search,
-            placeholder = "Search all ${kind.label.lowercase()}",
+            placeholder = if (localMode) "Search local files" else "Search all ${kind.label.lowercase()}",
             modifier = Modifier.width(360.dp),
         )
+    }
+}
+
+/**
+ * The user's own files: the folders (add, remove, rescan), then Continue watching for local titles, a
+ * row of series and a row of movies, each with See all. Search filters both.
+ */
+@Composable
+private fun LocalLibrary(
+    vm: AppViewModel,
+    style: PosterStyle,
+    query: String,
+    results: List<LibraryItem>,
+    continueWatching: List<WatchProgress>,
+    selected: LibraryItem?,
+    progressOf: (LibraryItem) -> WatchProgress?,
+) {
+    val library = vm.library
+    val settings by vm.settings.collectAsState()
+    val index by library.localIndex.collectAsState()
+    val scanning by library.localScanning.collectAsState()
+    var seeAll by remember { mutableStateOf<LibraryKind?>(null) }
+    val folders = settings.localFolders
+
+    Column(Modifier.fillMaxSize()) {
+        // Folders bar
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            folders.forEach { folder ->
+                WithTooltip(folder) {
+                    InputChip(
+                        selected = false,
+                        onClick = {},
+                        label = { Text(folder.trimEnd('\\', '/').substringAfterLast('\\').substringAfterLast('/').ifEmpty { folder }) },
+                        leadingIcon = { Icon(Icons.Outlined.Folder, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Remove $folder",
+                                modifier = Modifier.size(16.dp).clickable { vm.removeLocalFolder(folder) },
+                            )
+                        },
+                    )
+                }
+            }
+            AssistChip(
+                onClick = { pickFolder()?.let(vm::addLocalFolder) },
+                label = { Text("Add folder") },
+                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            )
+            if (folders.isNotEmpty()) {
+                WithTooltip("Rescan the folders") {
+                    IconButton(onClick = library::scanLocal, enabled = !scanning, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Rescan")
+                    }
+                }
+            }
+            if (scanning) {
+                LoadingIndicator(Modifier.size(28.dp))
+                Text("Scanning…", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                index?.let {
+                    Text(
+                        "${it.movies.size} movies · ${it.shows.size} series",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        val current = index
+        val localContinue = continueWatching.filter { it.sourceId == LOCAL_SOURCE }
+        when {
+            folders.isEmpty() -> LibraryEmpty("Add a folder with your movies and series to watch them here.")
+            current == null -> Unit // first scan running
+            current.isEmpty && !scanning -> LibraryEmpty("No video files found in these folders.")
+            query.isNotBlank() -> if (results.isNotEmpty()) {
+                PosterGrid(results, style, selected, progressOf, library::select, "local/search/$query")
+            } else {
+                LibraryEmpty("Nothing matches “$query”.")
+            }
+            seeAll != null -> {
+                val kind = seeAll!!
+                Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.padding(start = 16.dp, end = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { seeAll = null }, shapes = IconButtonDefaults.shapes()) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to all rows")
+                        }
+                        Text(if (kind == LibraryKind.SERIES) "Series" else "Movies", style = MaterialTheme.typography.titleLargeEmphasized)
+                    }
+                    val list = if (kind == LibraryKind.SERIES) current.shows.map { it.first } else current.movies
+                    PosterGrid(list, style, selected, progressOf, library::select, "local/all/$kind")
+                }
+            }
+            else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                if (localContinue.isNotEmpty()) {
+                    item(key = "continue") {
+                        RowSection("Continue watching") {
+                            val rowState = rememberLazyListState()
+                            Box(Modifier.fillMaxWidth()) {
+                                LazyRow(state = rowState, contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    items(localContinue, key = { it.key }) { entry ->
+                                        val watched = entry.episodeId != null && entry.finished && !entry.nextUp
+                                        ContinueCard(
+                                            entry,
+                                            style,
+                                            onPlay = { if (watched) vm.openSeries(entry) else vm.resume(entry) },
+                                            onRemove = { vm.forget(entry) },
+                                        )
+                                    }
+                                }
+                                RowScrollArrows(rowState, viewportWidth = { rowState.layoutInfo.viewportSize.width })
+                            }
+                        }
+                    }
+                }
+                listOf(LibraryKind.SERIES to current.shows.map { it.first }, LibraryKind.MOVIES to current.movies).forEach { (kind, list) ->
+                    if (list.isEmpty()) return@forEach
+                    item(key = "local-$kind") {
+                        RowSection(
+                            title = if (kind == LibraryKind.SERIES) "Series" else "Movies",
+                            onSeeAll = if (list.size > 1) ({ seeAll = kind }) else null,
+                        ) {
+                            val rowState = rememberLazyListState()
+                            Box(Modifier.fillMaxWidth()) {
+                                LazyRow(state = rowState, contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    items(list.take(ROW_ITEMS), key = { "${it.kind}:${it.id}" }) { item ->
+                                        PosterCard(item, style, selected = item.id == selected?.id, progress = progressOf(item)) {
+                                            library.select(item)
+                                        }
+                                    }
+                                }
+                                RowScrollArrows(rowState, viewportWidth = { rowState.layoutInfo.viewportSize.width })
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -423,12 +590,25 @@ private fun PosterCard(
             modifier = Modifier.fillMaxWidth().aspectRatio(if (style.landscape) 16f / 9f else 2f / 3f),
         ) {
             Box {
-                Icon(
-                    Icons.Outlined.Movie,
-                    contentDescription = null,
-                    tint = scheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.Center).size(32.dp),
-                )
+                if (image == null) {
+                    // No artwork (common for local files): the title, so cards stay tellable apart even with labels hidden.
+                    Column(
+                        Modifier.align(Alignment.Center).padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(Icons.Outlined.Movie, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                        Text(
+                            item.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = scheme.onSurface,
+                            textAlign = TextAlign.Center,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        item.year?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant) }
+                    }
+                }
                 if (image != null) {
                     Artwork(image, contentDescription = item.name, modifier = Modifier.fillMaxSize())
                 }
