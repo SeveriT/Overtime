@@ -597,7 +597,7 @@ internal fun UpNextCard(
         // Set explicitly: a translucent container doesn't map to a theme role, so it can't be derived.
         contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 8.dp,
-        modifier = modifier.padding(24.dp).width(360.dp),
+        modifier = modifier.padding(24.dp).width(400.dp),
     ) {
         Row(Modifier.padding(padding).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             next.backdrop?.let {
@@ -632,7 +632,7 @@ internal fun UpNextCard(
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.size(4.dp))
-                        Text("Play now", style = MaterialTheme.typography.labelLarge)
+                        Text("Play now", style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false)
                         Spacer(Modifier.size(6.dp))
                         KeyCap("N")
                     }
@@ -641,7 +641,7 @@ internal fun UpNextCard(
                         shapes = ButtonDefaults.shapes(),
                         contentPadding = PaddingValues(horizontal = 10.dp),
                         modifier = Modifier.height(32.dp),
-                    ) { Text("Cancel", style = MaterialTheme.typography.labelLarge) }
+                    ) { Text("Cancel", style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false) }
                 }
             }
         }
@@ -651,13 +651,14 @@ internal fun UpNextCard(
 /** A small keyboard-key label, e.g. the shortcut on a button. */
 @Composable
 private fun KeyCap(key: String) {
+    // Fixed size so the key never gets squeezed or clipped by the button around it.
     Box(
         Modifier
-            .border(1.dp, LocalContentColor.current.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 5.dp),
+            .size(18.dp)
+            .border(1.dp, LocalContentColor.current.copy(alpha = 0.6f), RoundedCornerShape(4.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(key, style = MaterialTheme.typography.labelSmall)
+        Text(key, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
     }
 }
 
