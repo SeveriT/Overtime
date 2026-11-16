@@ -1,7 +1,10 @@
 # Overtime – IPTV player for Windows
 
 Kotlin Multiplatform project (JVM target only for now, structured so an Android target can be added later).
-Compose Multiplatform UI, libVLC playback through vlcj 4.x (VLC 3.x must be installed on the machine).
+Compose Multiplatform UI, libVLC playback through vlcj 4.x. libVLC is bundled into the app image (`bundleVlc` task copies the build
+machine's VLC 3 64-bit into `app/resources/vlc`, minus plugins/gui; the plugin cache is rebuilt after
+`createDistributable`); `VlcPlayer` puts it on `jna.library.path` so it wins over an installed VLC.
+Unexpected errors are written to `%APPDATA%\Overtime\error.log` (`ErrorLog`).
 
 ## Layout
 

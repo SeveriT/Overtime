@@ -189,7 +189,10 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
     }
 
     init {
-        check(NativeDiscovery().discover()) { "VLC not found. Install 64-bit VLC 3.x from videolan.org." }
+        useBundledVlc()
+        check(NativeDiscovery().discover()) {
+            "VLC was not found. Install VLC 3 (64-bit) from videolan.org, or use the Overtime download that includes it."
+        }
         factory = newFactory(subtitleStyle)
         player = newPlayer(factory)
     }
@@ -658,4 +661,15 @@ private fun PictureAdjust.toColorMatrix(): ColorMatrix {
         setToSaturation(saturation)
         timesAssign(contrastBrightness)
     }
+}
+
+/**
+ * The app ships libVLC in its resources ("vlc", see composeApp/build.gradle.kts), so VLC needn't be
+ * installed. vlcj looks in jna.library.path before the installed VLC, so the bundled copy wins.
+ */
+private fun useBundledVlc() {
+    val resources = System.getProperty("compose.application.resources.dir") ?: return
+    val dir = java.io.File(resources, "vlc").takeIf { java.io.File(it, "libvlc.dll").isFile } ?: return
+    val existing = System.getProperty("jna.library.path")
+    System.setProperty("jna.library.path", listOfNotNull(dir.absolutePath, existing).joinToString(java.io.File.pathSeparator))
 }

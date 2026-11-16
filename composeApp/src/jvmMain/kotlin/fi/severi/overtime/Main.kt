@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.window.LocalWindowExceptionHandlerFactory
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,7 +77,13 @@ private fun loadAppIcon(): Painter? = runCatching {
     BitmapPainter(Image.makeFromEncoded(bytes).toComposeImageBitmap())
 }.getOrNull()
 
-fun main() = application {
+fun main() {
+    ErrorLog.install()
+    runApp()
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+private fun runApp() = application {
     val appIcon = remember { loadAppIcon() }
     val repo = remember { Repository(FileStore()) }
     // VLC takes the subtitle look at start-up, so it comes from the saved settings.
@@ -124,99 +133,102 @@ fun main() = application {
         }
     }
 
-    Window(
-        onCloseRequest = {
-            if (vm != null) {
-                val placement = if (windowState.placement == WindowPlacement.Fullscreen) beforeFullscreen else windowState.placement
-                floating?.let { bounds -> vm.updateSettings { it.copy(window = bounds.copy(maximized = placement == WindowPlacement.Maximized)) } }
-            }
-            vm?.shutdown()
-            exitApplication()
-        },
-        state = windowState,
-        title = "Overtime",
-        icon = appIcon,
-        onKeyEvent = { event ->
-            if (event.type != KeyEventType.KeyDown || vm == null) return@Window false
-            // Settings or Sources open, or typing in a search field: the keys belong to that.
-            if (ShortcutGuard.active) return@Window false
-            val combo = event.toCombo() ?: return@Window false
-            val keys = vm.shortcuts.value
-            fun pressed(action: Shortcut) = combo in keys.getValue(action)
-            // The library is a browsing page: only closing keys and playback basics apply.
-            if (vm.library.visible.value) {
-                return@Window when {
-                    pressed(Shortcut.BACK) || pressed(Shortcut.LIBRARY) -> { vm.library.close(); true }
-                    pressed(Shortcut.PLAY_PAUSE) -> { vm.player.togglePause(); true }
-                    pressed(Shortcut.FULLSCREEN) -> { vm.toggleFullscreen(); true }
-                    else -> false
+    // Errors are logged to error.log; a harmless Compose teardown error is not shown.
+    CompositionLocalProvider(LocalWindowExceptionHandlerFactory provides ErrorLog.windowHandlerFactory) {
+        Window(
+            onCloseRequest = {
+                if (vm != null) {
+                    val placement = if (windowState.placement == WindowPlacement.Fullscreen) beforeFullscreen else windowState.placement
+                    floating?.let { bounds -> vm.updateSettings { it.copy(window = bounds.copy(maximized = placement == WindowPlacement.Maximized)) } }
                 }
-            }
-            // In the guide its own keys (moving through time) come first; the rest work as usual.
-            if (vm.guideVisible.value) {
+                vm?.shutdown()
+                exitApplication()
+            },
+            state = windowState,
+            title = "Overtime",
+            icon = appIcon,
+            onKeyEvent = { event ->
+                if (event.type != KeyEventType.KeyDown || vm == null) return@Window false
+                // Settings or Sources open, or typing in a search field: the keys belong to that.
+                if (ShortcutGuard.active) return@Window false
+                val combo = event.toCombo() ?: return@Window false
+                val keys = vm.shortcuts.value
+                fun pressed(action: Shortcut) = combo in keys.getValue(action)
+                // The library is a browsing page: only closing keys and playback basics apply.
+                if (vm.library.visible.value) {
+                    return@Window when {
+                        pressed(Shortcut.BACK) || pressed(Shortcut.LIBRARY) -> { vm.library.close(); true }
+                        pressed(Shortcut.PLAY_PAUSE) -> { vm.player.togglePause(); true }
+                        pressed(Shortcut.FULLSCREEN) -> { vm.toggleFullscreen(); true }
+                        else -> false
+                    }
+                }
+                // In the guide its own keys (moving through time) come first; the rest work as usual.
+                if (vm.guideVisible.value) {
+                    when {
+                        pressed(Shortcut.GUIDE_EARLIER) -> { vm.shiftGuide(-GUIDE_STEP_MS); return@Window true }
+                        pressed(Shortcut.GUIDE_LATER) -> { vm.shiftGuide(GUIDE_STEP_MS); return@Window true }
+                        pressed(Shortcut.GUIDE_EARLIER_MORE) -> { vm.shiftGuide(-3 * GUIDE_STEP_MS); return@Window true }
+                        pressed(Shortcut.GUIDE_LATER_MORE) -> { vm.shiftGuide(3 * GUIDE_STEP_MS); return@Window true }
+                        pressed(Shortcut.GUIDE_NOW) -> { vm.guideToNow(); return@Window true }
+                    }
+                }
+                val onDemand = vm.currentVod.value != null
                 when {
-                    pressed(Shortcut.GUIDE_EARLIER) -> { vm.shiftGuide(-GUIDE_STEP_MS); return@Window true }
-                    pressed(Shortcut.GUIDE_LATER) -> { vm.shiftGuide(GUIDE_STEP_MS); return@Window true }
-                    pressed(Shortcut.GUIDE_EARLIER_MORE) -> { vm.shiftGuide(-3 * GUIDE_STEP_MS); return@Window true }
-                    pressed(Shortcut.GUIDE_LATER_MORE) -> { vm.shiftGuide(3 * GUIDE_STEP_MS); return@Window true }
-                    pressed(Shortcut.GUIDE_NOW) -> { vm.guideToNow(); return@Window true }
-                }
-            }
-            val onDemand = vm.currentVod.value != null
-            when {
-                pressed(Shortcut.FULLSCREEN) -> { vm.toggleFullscreen(); true }
-                pressed(Shortcut.GUIDE) -> { vm.toggleGuide(); true }
-                pressed(Shortcut.LIBRARY) -> { if (vm.hasLibrary.value) vm.openLibrary(); true }
-                pressed(Shortcut.BACK) -> when {
-                    vm.guideVisible.value -> { vm.closeGuide(); true }
-                    fullscreen -> { vm.setFullscreen(false); true }
-                    !vm.showGroupList.value -> { vm.backToGroups(); true }
+                    pressed(Shortcut.FULLSCREEN) -> { vm.toggleFullscreen(); true }
+                    pressed(Shortcut.GUIDE) -> { vm.toggleGuide(); true }
+                    pressed(Shortcut.LIBRARY) -> { if (vm.hasLibrary.value) vm.openLibrary(); true }
+                    pressed(Shortcut.BACK) -> when {
+                        vm.guideVisible.value -> { vm.closeGuide(); true }
+                        fullscreen -> { vm.setFullscreen(false); true }
+                        !vm.showGroupList.value -> { vm.backToGroups(); true }
+                        else -> false
+                    }
+                    pressed(Shortcut.PLAY_PAUSE) -> { vm.player.togglePause(); true }
+                    pressed(Shortcut.MUTE) -> { vm.player.toggleMute(); true }
+                    pressed(Shortcut.SIDEBAR) -> { vm.toggleSidebar(); true }
+                    pressed(Shortcut.STREAM_INFO) -> { vm.toggleStats(); true }
+                    pressed(Shortcut.AUDIO_TRACK) -> { vm.cycleAudioTrack(); true }
+                    pressed(Shortcut.SUBTITLES) -> { vm.cycleSubtitles(); true }
+                    pressed(Shortcut.NEXT_EPISODE) -> { vm.playNextEpisode(); true }
+                    // Movies seek with these; live TV changes channel.
+                    pressed(Shortcut.PREVIOUS) -> { if (onDemand) vm.seekBy(-REWIND_STEP_MS) else vm.step(-1); true }
+                    pressed(Shortcut.NEXT) -> { if (onDemand) vm.seekBy(REWIND_STEP_MS) else vm.step(1); true }
+                    pressed(Shortcut.REWIND) -> { vm.seekBy(-REWIND_STEP_MS); true }
+                    pressed(Shortcut.FORWARD) -> { vm.seekBy(REWIND_STEP_MS); true }
+                    pressed(Shortcut.CHANNEL_UP) -> { vm.step(-1); true }
+                    pressed(Shortcut.CHANNEL_DOWN) -> { vm.step(1); true }
+                    pressed(Shortcut.GO_LIVE) -> { vm.goLive(); true }
+                    pressed(Shortcut.VOLUME_UP) -> { vm.adjustVolume(+5); true }
+                    pressed(Shortcut.VOLUME_DOWN) -> { vm.adjustVolume(-5); true }
                     else -> false
                 }
-                pressed(Shortcut.PLAY_PAUSE) -> { vm.player.togglePause(); true }
-                pressed(Shortcut.MUTE) -> { vm.player.toggleMute(); true }
-                pressed(Shortcut.SIDEBAR) -> { vm.toggleSidebar(); true }
-                pressed(Shortcut.STREAM_INFO) -> { vm.toggleStats(); true }
-                pressed(Shortcut.AUDIO_TRACK) -> { vm.cycleAudioTrack(); true }
-                pressed(Shortcut.SUBTITLES) -> { vm.cycleSubtitles(); true }
-                pressed(Shortcut.NEXT_EPISODE) -> { vm.playNextEpisode(); true }
-                // Movies seek with these; live TV changes channel.
-                pressed(Shortcut.PREVIOUS) -> { if (onDemand) vm.seekBy(-REWIND_STEP_MS) else vm.step(-1); true }
-                pressed(Shortcut.NEXT) -> { if (onDemand) vm.seekBy(REWIND_STEP_MS) else vm.step(1); true }
-                pressed(Shortcut.REWIND) -> { vm.seekBy(-REWIND_STEP_MS); true }
-                pressed(Shortcut.FORWARD) -> { vm.seekBy(REWIND_STEP_MS); true }
-                pressed(Shortcut.CHANNEL_UP) -> { vm.step(-1); true }
-                pressed(Shortcut.CHANNEL_DOWN) -> { vm.step(1); true }
-                pressed(Shortcut.GO_LIVE) -> { vm.goLive(); true }
-                pressed(Shortcut.VOLUME_UP) -> { vm.adjustVolume(+5); true }
-                pressed(Shortcut.VOLUME_DOWN) -> { vm.adjustVolume(-5); true }
-                else -> false
+            },
+        ) {
+            // Narrowest the player controls fit (rewind bar and two button rows), and tall enough for them
+            // and the channel title. In the same scaled units as dp.
+            LaunchedEffect(window) { window.minimumSize = Dimension(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT) }
+            // Re-applied after fullscreen changes in case the native window was recreated.
+            LaunchedEffect(window, fullscreen, titleBarColor) {
+                TitleBar.apply(
+                    window,
+                    caption = titleBarColor,
+                    text = contentColorFor(titleBarColor),
+                    darkMode = !isLightColor(titleBarColor),
+                )
             }
-        },
-    ) {
-        // Narrowest the player controls fit (rewind bar and two button rows), and tall enough for them
-        // and the channel title. In the same scaled units as dp.
-        LaunchedEffect(window) { window.minimumSize = Dimension(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT) }
-        // Re-applied after fullscreen changes in case the native window was recreated.
-        LaunchedEffect(window, fullscreen, titleBarColor) {
-            TitleBar.apply(
-                window,
-                caption = titleBarColor,
-                text = contentColorFor(titleBarColor),
-                darkMode = !isLightColor(titleBarColor),
-            )
-        }
 
-        if (vm != null) {
-            App(vm)
-        } else {
-            OvertimeTheme {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        playerResult.exceptionOrNull()?.message ?: "Could not start the video player.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(32.dp),
-                    )
+            if (vm != null) {
+                App(vm)
+            } else {
+                OvertimeTheme {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            playerResult.exceptionOrNull()?.message ?: "Could not start the video player.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(32.dp),
+                        )
+                    }
                 }
             }
         }

@@ -43,8 +43,8 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 ## Requirements
 
 - Windows 10/11, 64-bit
-- [VLC 3.x 64-bit](https://www.videolan.org/) installed (the app uses its libVLC)
-- JDK 17 or newer to build
+- Nothing else: libVLC comes with the app
+- To build: JDK 17 or newer and [VLC 3.x 64-bit](https://www.videolan.org/) installed (its libVLC is bundled into the app)
 
 ## Build & run
 
