@@ -81,6 +81,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -139,6 +142,9 @@ fun PlayerPane(
     var lastActivity by remember { mutableStateOf(nowMillis()) }
     val focusManager = LocalFocusManager.current
     var overlayVisible by remember { mutableStateOf(true) }
+    // Measured so the Up next card can sit just above the controls while they show.
+    var toolbarHeight by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
     // A toolbar menu is a popup: the mouse over it doesn't count as activity here, so hold the controls
     // up while one is open (hiding them would close the menu mid-drag), then count down from its closing.
     var menuOpen by remember { mutableStateOf(false) }
@@ -202,12 +208,14 @@ fun PlayerPane(
             )
         }
 
-        // During the end credits: the next episode on the right, clear of the title and the controls.
+        // During the end credits: the next episode in the lower right corner, lifted above the controls
+        // while they show so it never covers them.
+        val upNextLift by animateDpAsState(if (overlayVisible) toolbarHeight + TOOLBAR_BOTTOM_GAP else 0.dp)
         AnimatedVisibility(
             visible = upNextEntry != null && countdown != null,
             enter = fadeIn() + scaleIn(initialScale = 0.95f),
             exit = fadeOut() + scaleOut(targetScale = 0.95f),
-            modifier = Modifier.align(Alignment.CenterEnd),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = upNextLift),
         ) {
             // Holds the last values while fading out.
             val shownNext = remember { mutableStateOf(upNextEntry) }
@@ -357,7 +365,10 @@ fun PlayerPane(
                     media = state.media,
                     onDemand = vod != null,
                     compact = compactToolbar,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = TOOLBAR_BOTTOM_GAP)
+                        .onSizeChanged { toolbarHeight = with(density) { it.height.toDp() } },
                 )
                 }
             }
@@ -555,6 +566,9 @@ private fun ToolbarButtons(
         }
     }
 }
+
+/** Space between the controls and the bottom of the player. */
+private val TOOLBAR_BOTTOM_GAP = 24.dp
 
 /** Below this player width the toolbar buttons wrap onto two rows. */
 private val COMPACT_TOOLBAR_WIDTH = 904.dp
