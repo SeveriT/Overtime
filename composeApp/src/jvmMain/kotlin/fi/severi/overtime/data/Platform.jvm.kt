@@ -33,6 +33,8 @@ actual class FileStore actual constructor() {
     actual fun delete(name: String) {
         File(dir, name).delete()
     }
+
+    actual fun modifiedAt(name: String): Long? = File(dir, name).takeIf { it.isFile }?.lastModified()
 }
 
 actual fun readLocalFile(path: String): String = File(path).readText()

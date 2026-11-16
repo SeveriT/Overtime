@@ -43,6 +43,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -280,7 +282,16 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
             }
             // After the cached guide is in, so it can't overwrite the fresh one. Cached channels stay usable
             // (and the last channel keeps playing) while this runs.
-            if (_settings.value.refreshOnLaunch) refreshAll(quiet = true)
+            if (_settings.value.refreshOnLaunch) {
+                // Let the resumed channel get going first: the playlist and guide downloads (tens of MB)
+                // would compete with it for bandwidth and keep the picture black for longer.
+                val resuming = _settings.value.lastChannelId?.let { id -> _channels.value.values.any { list -> list.any { it.id == id } } } == true
+                if (resuming) {
+                    withTimeoutOrNull(LAUNCH_REFRESH_WAIT_MS) { player.state.first { it.playing } }
+                    delay(LAUNCH_REFRESH_SETTLE_MS)
+                }
+                refreshAll(quiet = true, guideMaxAgeMs = GUIDE_MAX_AGE_MS)
+            }
         }
         // Resuming the last channel happens in the init block at the end of the class, once every
         // property play() touches has been initialised.
@@ -776,14 +787,14 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         _sources.update { it + source }
         repo.saveSources(_sources.value)
         selectSource(source.id)
-        refreshSource(source.id)
+        refreshSource(source.id, guideMaxAgeMs = 0L)
     }
 
     /** Saves changes to an existing source (same id, so favourites stay) and reloads its channels and guide. */
     fun updateSource(source: Source) {
         _sources.update { list -> list.map { if (it.id == source.id) source else it } }
         repo.saveSources(_sources.value)
-        refreshSource(source.id)
+        refreshSource(source.id, guideMaxAgeMs = 0L)
     }
 
     fun removeSource(id: String) {
@@ -803,7 +814,8 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
      * Reloads a source's channels and guide. [quiet] (the refresh at launch) shows "Updating…" and, when
      * there are cached channels to fall back on, keeps a failure out of the sidebar.
      */
-    fun refreshSource(id: String, quiet: Boolean = false) {
+    /** Refreshes a source; its guides are downloaded again once older than [guideMaxAgeMs]. */
+    fun refreshSource(id: String, quiet: Boolean = false, guideMaxAgeMs: Long = GUIDE_MANUAL_MAX_AGE_MS) {
         val source = _sources.value.firstOrNull { it.id == id } ?: return
         scope.launch {
             error.value = null
@@ -818,7 +830,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
                         guides == 1 -> "Loading guide for ${source.name}…"
                         else -> "Loading $guides guides for ${source.name}…"
                     }
-                    val epg = repo.fetchEpg(source)
+                    val epg = repo.fetchEpg(source, guideMaxAgeMs)
                     _epg.update { it + (source.id to epg) }
                 }
             } catch (e: CancellationException) {
@@ -833,7 +845,8 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         }
     }
 
-    fun refreshAll(quiet: Boolean = false) = _sources.value.forEach { refreshSource(it.id, quiet) }
+    fun refreshAll(quiet: Boolean = false, guideMaxAgeMs: Long = GUIDE_MANUAL_MAX_AGE_MS) =
+        _sources.value.forEach { refreshSource(it.id, quiet, guideMaxAgeMs) }
 
     /** How many guides an M3U playlist's own header names (shown in the sources list). */
     fun playlistGuideCount(sourceId: String): Int = repo.playlistGuides(sourceId).size
@@ -880,6 +893,18 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
         /** How far before the Up next window a seek must land to show the card again after Cancel. */
         const val UP_NEXT_REARM_MS = 5_000L
+
+        /** The refresh at start-up waits at most this long for the resumed channel to start playing. */
+        const val LAUNCH_REFRESH_WAIT_MS = 15_000L
+
+        /** ...and then this much more, so the picture is up before the downloads start. */
+        const val LAUNCH_REFRESH_SETTLE_MS = 3_000L
+
+        /** A guide downloaded within this long is reused by the refresh at start-up. */
+        const val GUIDE_MAX_AGE_MS = 12 * 60 * 60_000L
+
+        /** Refresh by hand re-downloads guides older than this. */
+        const val GUIDE_MANUAL_MAX_AGE_MS = 60 * 60_000L
 
         /** Settings changes are collected this long before writing. */
         const val SETTINGS_SAVE_DELAY_MS = 300L

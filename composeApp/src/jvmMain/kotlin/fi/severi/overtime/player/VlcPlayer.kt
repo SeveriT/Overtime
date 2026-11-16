@@ -59,6 +59,9 @@ import kotlin.math.roundToInt
  */
 class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : VideoPlayer {
     // Replaced together when the subtitle style changes (VLC reads it only at start-up).
+    /** The bundled VLC has no plugin cache yet: the first factory has VLC write one. */
+    private var buildPluginCache = false
+
     @Volatile private var factory: MediaPlayerFactory
     @Volatile private var player: EmbeddedMediaPlayer
 
@@ -189,7 +192,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
     }
 
     init {
-        useBundledVlc()
+        buildPluginCache = useBundledVlc()
         check(NativeDiscovery().discover()) {
             "VLC was not found. Install VLC 3 (64-bit) from videolan.org, or use the Overtime download that includes it."
         }
@@ -197,8 +200,11 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
         player = newPlayer(factory)
     }
 
-    private fun newFactory(style: SubtitleStyle) =
-        MediaPlayerFactory(*(listOf("--no-video-title-show", "--quiet") + style.vlcArgs()).toTypedArray())
+    private fun newFactory(style: SubtitleStyle): MediaPlayerFactory {
+        val cacheArgs = if (buildPluginCache) listOf("--reset-plugins-cache") else emptyList()
+        buildPluginCache = false
+        return MediaPlayerFactory(*(listOf("--no-video-title-show", "--quiet") + cacheArgs + style.vlcArgs()).toTypedArray())
+    }
 
     private fun newPlayer(factory: MediaPlayerFactory): EmbeddedMediaPlayer =
         factory.mediaPlayers().newEmbeddedMediaPlayer().also {
@@ -667,27 +673,12 @@ private fun PictureAdjust.toColorMatrix(): ColorMatrix {
  * The app ships libVLC in its resources ("vlc", see composeApp/build.gradle.kts), so VLC needn't be
  * installed. vlcj looks in jna.library.path before the installed VLC, so the bundled copy wins.
  */
-private fun useBundledVlc() {
-    val resources = System.getProperty("compose.application.resources.dir") ?: return
-    val dir = java.io.File(resources, "vlc").takeIf { java.io.File(it, "libvlc.dll").isFile } ?: return
-    buildPluginCache(dir)
+private fun useBundledVlc(): Boolean {
+    val resources = System.getProperty("compose.application.resources.dir") ?: return false
+    val dir = java.io.File(resources, "vlc").takeIf { java.io.File(it, "libvlc.dll").isFile } ?: return false
     val existing = System.getProperty("jna.library.path")
     System.setProperty("jna.library.path", listOfNotNull(dir.absolutePath, existing).joinToString(java.io.File.pathSeparator))
-}
-
-/**
- * VLC loads every plugin to learn what it does unless plugins.dat lists them; it records file times, so
- * it's made on the PC itself, once (under a second). Without write access VLC simply scans each start.
- */
-private fun buildPluginCache(vlcDir: java.io.File) {
-    val plugins = java.io.File(vlcDir, "plugins")
-    val cacheGen = java.io.File(vlcDir, "vlc-cache-gen.exe")
-    if (java.io.File(plugins, "plugins.dat").isFile || !cacheGen.isFile) return
-    runCatching {
-        val process = ProcessBuilder(cacheGen.absolutePath, plugins.absolutePath)
-            .redirectErrorStream(true)
-            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-            .start()
-        if (!process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) process.destroyForcibly()
-    }
+    // VLC loads every plugin to learn what it does unless plugins.dat lists them. The cache records file
+    // times, which unzipping changes, so none is shipped: VLC writes it on the first start (~0.2 s).
+    return !java.io.File(dir, "plugins/plugins.dat").isFile
 }

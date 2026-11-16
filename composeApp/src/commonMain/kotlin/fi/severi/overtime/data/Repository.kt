@@ -195,13 +195,25 @@ class Repository(private val store: FileStore) {
             .fold(EpgData()) { all, next -> all + next }
     }
 
-    /** Downloads every guide for the source and merges them. One failing guide doesn't sink the others. */
-    suspend fun fetchEpg(source: Source): EpgData = withContext(Dispatchers.Default) {
+    /**
+     * Downloads every guide for the source and merges them. One failing guide doesn't sink the others.
+     * A cached guide younger than [maxAgeMs] is used as it is: guide hosts often limit downloads per day
+     * (m3u4u answers with a "download limit" page instead of the guide).
+     */
+    suspend fun fetchEpg(source: Source, maxAgeMs: Long = 0L): EpgData = withContext(Dispatchers.Default) {
         val urls = epgUrlsFor(source).take(MAX_GUIDES)
         if (urls.isEmpty()) return@withContext EpgData()
         var merged = EpgData()
         var firstError: Exception? = null
         urls.forEachIndexed { index, url ->
+            val cachedAt = store.modifiedAt(epgFile(source.id, index))
+            if (cachedAt != null && nowMillis() - cachedAt < maxAgeMs) {
+                val cached = runCatching { store.readBytes(epgFile(source.id, index))?.let(::parseXmltv) }.getOrNull()
+                if (cached != null && !cached.isEmpty) {
+                    merged += cached
+                    return@forEachIndexed
+                }
+            }
             try {
                 val bytes = client.get(url).bodyAsBytes()
                 val epg = parseXmltv(bytes)

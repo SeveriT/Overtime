@@ -46,14 +46,14 @@ kotlin {
 /**
  * libVLC is bundled so Overtime works without VLC installed: copied from the VLC 3 (64-bit) on the
  * build machine (`-PvlcDir=...` to use another), minus its own Qt interface. VLC's plugin cache records
- * file times, which zipping and copying change, so none is shipped: the app builds it on first start.
+ * file times, which zipping and copying change, so none is shipped: VLC writes it on the first start.
  */
 val vlcSource = providers.gradleProperty("vlcDir").orElse("C:/Program Files/VideoLAN/VLC")
 val bundledVlcRoot = layout.buildDirectory.dir("vlc-resources")
 val bundleVlc by tasks.registering(Sync::class) {
     val source = vlcSource.get()
     from(source) {
-        include("libvlc.dll", "libvlccore.dll", "vlc-cache-gen.exe", "COPYING.txt", "README.txt", "plugins/**")
+        include("libvlc.dll", "libvlccore.dll", "COPYING.txt", "README.txt", "plugins/**")
         exclude("plugins/gui/**", "plugins/plugins.dat")
     }
     into(bundledVlcRoot.map { it.dir("windows/vlc") })

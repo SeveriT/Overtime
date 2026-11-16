@@ -11,6 +11,9 @@ expect class FileStore() {
     fun readBytes(name: String): ByteArray?
     fun writeBytes(name: String, bytes: ByteArray)
     fun delete(name: String)
+
+    /** When [name] was last written (epoch ms), or null if it doesn't exist. */
+    fun modifiedAt(name: String): Long?
 }
 
 expect fun readLocalFile(path: String): String
