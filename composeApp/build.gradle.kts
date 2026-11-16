@@ -45,14 +45,15 @@ kotlin {
 
 /**
  * libVLC is bundled so Overtime works without VLC installed: copied from the VLC 3 (64-bit) on the
- * build machine (`-PvlcDir=...` to use another), minus its own Qt interface, with a fresh plugin cache.
+ * build machine (`-PvlcDir=...` to use another), minus its own Qt interface. VLC's plugin cache records
+ * file times, which zipping and copying change, so none is shipped: the app builds it on first start.
  */
 val vlcSource = providers.gradleProperty("vlcDir").orElse("C:/Program Files/VideoLAN/VLC")
 val bundledVlcRoot = layout.buildDirectory.dir("vlc-resources")
 val bundleVlc by tasks.registering(Sync::class) {
     val source = vlcSource.get()
     from(source) {
-        include("libvlc.dll", "libvlccore.dll", "COPYING.txt", "README.txt", "plugins/**")
+        include("libvlc.dll", "libvlccore.dll", "vlc-cache-gen.exe", "COPYING.txt", "README.txt", "plugins/**")
         exclude("plugins/gui/**", "plugins/plugins.dat")
     }
     into(bundledVlcRoot.map { it.dir("windows/vlc") })
@@ -70,7 +71,7 @@ compose.desktop {
             // silently at startup since the material3 Expressive upgrade.
             modules("java.instrument", "java.management", "jdk.unsupported", "java.xml", "jdk.accessibility")
             packageName = "Overtime"
-            packageVersion = "0.7.0"
+            packageVersion = "0.7.1"
             description = "IPTV player"
             vendor = "Severi"
             windows {
@@ -85,17 +86,3 @@ compose.desktop {
 }
 
 tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(bundleVlc) }
-
-// VLC's plugin cache records file times, which change when the app image is assembled: build it in
-// the finished image (zip and install copies keep the times), or every start would rescan the plugins.
-val vlcCacheGen = vlcSource.map { File(it, "vlc-cache-gen.exe") }
-val distributedPlugins = layout.buildDirectory.dir("compose/binaries/main/app/Overtime/app/resources/vlc/plugins")
-tasks.matching { it.name == "createDistributable" }.configureEach {
-    val cacheGen = vlcCacheGen.get()
-    val plugins = distributedPlugins.get().asFile
-    doLast {
-        if (cacheGen.isFile && plugins.isDirectory) {
-            ProcessBuilder(cacheGen.absolutePath, plugins.absolutePath).inheritIO().start().waitFor()
-        }
-    }
-}

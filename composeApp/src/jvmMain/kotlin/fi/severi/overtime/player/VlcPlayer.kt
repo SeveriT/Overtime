@@ -670,6 +670,24 @@ private fun PictureAdjust.toColorMatrix(): ColorMatrix {
 private fun useBundledVlc() {
     val resources = System.getProperty("compose.application.resources.dir") ?: return
     val dir = java.io.File(resources, "vlc").takeIf { java.io.File(it, "libvlc.dll").isFile } ?: return
+    buildPluginCache(dir)
     val existing = System.getProperty("jna.library.path")
     System.setProperty("jna.library.path", listOfNotNull(dir.absolutePath, existing).joinToString(java.io.File.pathSeparator))
+}
+
+/**
+ * VLC loads every plugin to learn what it does unless plugins.dat lists them; it records file times, so
+ * it's made on the PC itself, once (under a second). Without write access VLC simply scans each start.
+ */
+private fun buildPluginCache(vlcDir: java.io.File) {
+    val plugins = java.io.File(vlcDir, "plugins")
+    val cacheGen = java.io.File(vlcDir, "vlc-cache-gen.exe")
+    if (java.io.File(plugins, "plugins.dat").isFile || !cacheGen.isFile) return
+    runCatching {
+        val process = ProcessBuilder(cacheGen.absolutePath, plugins.absolutePath)
+            .redirectErrorStream(true)
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .start()
+        if (!process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) process.destroyForcibly()
+    }
 }
