@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 /**
  * The one volume bar used everywhere (player toolbar and the volume popup), so both look identical:
@@ -63,9 +64,16 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun VolumeSlider(volume: Int, muted: Boolean, onVolumeChange: (Int) -> Unit, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
+    // While dragging, the thumb follows the pointer directly instead of waiting for the volume to come
+    // back through the app's state a frame or two later.
+    var dragValue by remember { mutableStateOf<Float?>(null) }
     Slider(
-        value = volume.toFloat(),
-        onValueChange = { onVolumeChange(it.toInt()) },
+        value = dragValue ?: volume.toFloat(),
+        onValueChange = {
+            dragValue = it
+            onVolumeChange(it.roundToInt())
+        },
+        onValueChangeFinished = { dragValue = null },
         valueRange = 0f..100f,
         colors = if (muted) {
             SliderDefaults.colors(
