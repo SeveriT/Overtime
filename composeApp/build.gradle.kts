@@ -53,7 +53,7 @@ compose.desktop {
             // silently at startup since the material3 Expressive upgrade.
             modules("java.instrument", "java.management", "jdk.unsupported", "java.xml", "jdk.accessibility")
             packageName = "Overtime"
-            packageVersion = "0.5.1"
+            packageVersion = "0.5.2"
             description = "IPTV player"
             vendor = "Severi"
             windows {
