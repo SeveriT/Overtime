@@ -35,6 +35,7 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 - Material 3 Expressive design
 - Custom accent, sidebar and title bar colours
 - Compact layout for narrow windows
+- Scrollbars on long sidebar lists
 
 ## Requirements
 
