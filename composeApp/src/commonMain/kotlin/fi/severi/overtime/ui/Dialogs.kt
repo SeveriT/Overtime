@@ -1,6 +1,14 @@
 package fi.severi.overtime.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -602,8 +610,40 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                     looks()
                 }
                 // Full width under both columns: a long list, laid out in two columns of its own when there's room.
-                SectionHeader("Keyboard shortcuts")
-                ShortcutEditor(shortcutKeys, onChange = { shortcutKeys = it }, twoColumns = wide)
+                // Collapsed by default: a long list most people rarely need.
+                var shortcutsOpen by remember { mutableStateOf(false) }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.large)
+                        .clickable { shortcutsOpen = !shortcutsOpen }
+                        .padding(top = 8.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Keyboard shortcuts",
+                        style = MaterialTheme.typography.titleSmallEmphasized,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (!shortcutsOpen && shortcutKeys.isNotEmpty()) {
+                        Text(
+                            "${shortcutKeys.size} changed",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    Icon(
+                        if (shortcutsOpen) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (shortcutsOpen) "Hide keyboard shortcuts" else "Show keyboard shortcuts",
+                    )
+                }
+                AnimatedVisibility(visible = shortcutsOpen, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ShortcutEditor(shortcutKeys, onChange = { shortcutKeys = it }, twoColumns = wide)
+                    }
+                }
             }
         }
     }
