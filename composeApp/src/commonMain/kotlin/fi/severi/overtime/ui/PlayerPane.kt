@@ -60,6 +60,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.border
 import fi.severi.overtime.model.WatchProgress
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.widthIn
@@ -572,9 +577,12 @@ private val TOOLBAR_BOTTOM_GAP = 24.dp
 /** Below this player width the toolbar buttons wrap onto two rows. */
 private val COMPACT_TOOLBAR_WIDTH = 904.dp
 
-/** In the end credits: the next episode, the time until it starts (with autoplay), Play now and Cancel. */
+/**
+ * In the end credits: the next episode, the time until it starts (with autoplay), Play now (N) and
+ * Cancel. The thumbnail's corners follow the card's, inset by the padding, so it sits evenly inside.
+ */
 @Composable
-private fun UpNextCard(
+internal fun UpNextCard(
     next: WatchProgress,
     seconds: Int,
     autoplay: Boolean,
@@ -582,43 +590,78 @@ private fun UpNextCard(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val padding = 10.dp
     Surface(
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = RoundedCornerShape(UP_NEXT_CORNER),
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
+        // Set explicitly: a translucent container doesn't map to a theme role, so it can't be derived.
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 8.dp,
-        modifier = modifier.padding(24.dp).widthIn(max = 460.dp),
+        modifier = modifier.padding(24.dp).width(360.dp),
     ) {
-        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(padding).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             next.backdrop?.let {
-                Artwork(it, contentDescription = null, modifier = Modifier.width(160.dp).aspectRatio(16f / 9f).clip(MaterialTheme.shapes.medium))
+                Artwork(
+                    it,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .width(128.dp)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(UP_NEXT_CORNER - padding))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                )
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Up next", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Column(Modifier.weight(1f).padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    if (autoplay) "Up next in $seconds s" else "Up next",
+                    style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+                    color = MaterialTheme.colorScheme.primary,
+                )
                 Text(
                     "S${next.season} E${next.episode}" + next.episodeTitle?.let { " · $it" }.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (autoplay) {
-                    Text(
-                        "Starting in $seconds s",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onPlay, shapes = ButtonDefaults.shapes()) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                        Text("Play now")
+                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        onClick = onPlay,
+                        shapes = ButtonDefaults.shapes(),
+                        contentPadding = PaddingValues(start = 10.dp, end = 12.dp),
+                        modifier = Modifier.height(32.dp),
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(4.dp))
+                        Text("Play now", style = MaterialTheme.typography.labelLarge)
+                        Spacer(Modifier.size(6.dp))
+                        KeyCap("N")
                     }
-                    TextButton(onClick = onCancel, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
+                    TextButton(
+                        onClick = onCancel,
+                        shapes = ButtonDefaults.shapes(),
+                        contentPadding = PaddingValues(horizontal = 10.dp),
+                        modifier = Modifier.height(32.dp),
+                    ) { Text("Cancel", style = MaterialTheme.typography.labelLarge) }
                 }
             }
         }
     }
 }
+
+/** A small keyboard-key label, e.g. the shortcut on a button. */
+@Composable
+private fun KeyCap(key: String) {
+    Box(
+        Modifier
+            .border(1.dp, LocalContentColor.current.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(key, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+private val UP_NEXT_CORNER = 22.dp
 
 /** Toolbar menus report opening and closing so the controls stay up meanwhile. */
 private val LocalMenuOpenChange = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
