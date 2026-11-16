@@ -644,11 +644,11 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     private fun commit(entry: WatchProgress) {
         lastSavedAt = nowMillis()
         // A peek of a few seconds isn't worth a Continue watching card.
-        if (entry.fraction < WatchProgress.STARTED_AT && history[entry.key] == null) return
+        if (!entry.started && history[entry.key] == null) return
         history.record(entry)
         if (entry.finished) {
             nextEpisode?.let { next ->
-                val started = history[next.key]?.let { it.fraction >= WatchProgress.STARTED_AT } == true
+                val started = history[next.key]?.started == true
                 if (!started) history.record(next.copy(updatedAt = nowMillis() + 1, nextUp = true))
             }
             nextEpisode = null

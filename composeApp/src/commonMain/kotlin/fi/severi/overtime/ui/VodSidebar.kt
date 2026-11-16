@@ -211,7 +211,7 @@ private fun SidebarEpisode(episode: Episode, playing: Boolean, progress: WatchPr
                     overflow = TextOverflow.Ellipsis,
                 )
                 episode.duration?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant) }
-                if (!playing && progress != null && !progress.finished && !progress.nextUp && progress.fraction >= WatchProgress.STARTED_AT) {
+                if (!playing && progress != null && !progress.finished && !progress.nextUp && progress.started) {
                     LinearProgressIndicator(
                         progress = { progress.fraction },
                         drawStopIndicator = {},

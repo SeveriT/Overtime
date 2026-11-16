@@ -46,6 +46,20 @@ class LibraryLogicTest {
     )
 
     @Test
+    fun tenSecondsCountsAsStarted() {
+        fun movie(position: Long, duration: Long) = WatchProgress(
+            key = "m", sourceId = "s", kind = LibraryKind.MOVIES, itemId = "m", title = "m", extension = "mkv",
+            positionMs = position, durationMs = duration, updatedAt = 0,
+        )
+        val twoHours = 2 * 60 * 60_000L
+        assertEquals(false, movie(5_000, twoHours).started)
+        assertEquals(true, movie(10_000, twoHours).started)
+        // A short clip still counts from 2 %.
+        assertEquals(true, movie(2_000, 60_000).started)
+        assertEquals(false, movie(1_000, 60_000).started)
+    }
+
+    @Test
     fun continueWatchingRules() {
         val entries = listOf(
             entry("movie-half", 500, updatedAt = 10),

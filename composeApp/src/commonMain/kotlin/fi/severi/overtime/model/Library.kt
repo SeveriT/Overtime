@@ -104,9 +104,13 @@ data class WatchProgress(
     val fraction: Float get() = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val finished: Boolean get() = durationMs > 0 && fraction >= FINISHED_AT
 
+    /** Watched long enough to count: 10 seconds (or 2 % of a clip shorter than about 8 minutes). */
+    val started: Boolean get() = durationMs > 0 && (positionMs >= STARTED_MS || fraction >= STARTED_AT)
+
     companion object {
-        /** Below this nothing is saved as "started"; above FINISHED_AT it counts as watched. */
+        /** Under STARTED_MS (or STARTED_AT of a short clip) nothing is saved as "started"; above FINISHED_AT it counts as watched. */
         const val STARTED_AT = 0.02f
+        const val STARTED_MS = 10_000L
         const val FINISHED_AT = 0.95f
     }
 }

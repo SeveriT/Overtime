@@ -641,7 +641,7 @@ private fun PosterCard(
                             modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(22.dp)
                                 .background(scheme.scrim.copy(alpha = 0.6f), RoundedCornerShape(50)),
                         )
-                    } else if (p.fraction >= WatchProgress.STARTED_AT) {
+                    } else if (p.started) {
                         LinearProgressIndicator(
                             progress = { p.fraction },
                             color = MaterialTheme.colorScheme.error,
@@ -858,7 +858,7 @@ private fun LibraryDetails(vm: AppViewModel, item: LibraryItem, style: PosterSty
             }
             if (item.kind == LibraryKind.MOVIES) {
                 item {
-                    val resumable = movieProgress != null && !movieProgress.finished && movieProgress.fraction >= WatchProgress.STARTED_AT
+                    val resumable = movieProgress != null && !movieProgress.finished && movieProgress.started
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = { vm.playMovie(item, movie) },
@@ -968,7 +968,7 @@ private fun EpisodeRow(episode: Episode, progress: WatchProgress?, onPlay: () ->
                 if (episode.image != null) {
                     Artwork(episode.image, contentDescription = null, modifier = Modifier.fillMaxSize())
                 }
-                if (progress != null && !progress.finished && !progress.nextUp && progress.fraction >= WatchProgress.STARTED_AT) {
+                if (progress != null && !progress.finished && !progress.nextUp && progress.started) {
                     LinearProgressIndicator(
                         progress = { progress.fraction },
                         color = scheme.error,

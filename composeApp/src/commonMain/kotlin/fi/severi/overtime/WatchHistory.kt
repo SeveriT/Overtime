@@ -37,7 +37,7 @@ class WatchHistory(initial: List<WatchProgress>, private val save: (List<WatchPr
 
     /** Position to resume [key] from, or null to start at the beginning. */
     fun resumeAt(key: String): Long? =
-        get(key)?.takeIf { !it.nextUp && !it.finished && it.fraction >= WatchProgress.STARTED_AT }?.positionMs
+        get(key)?.takeIf { !it.nextUp && !it.finished && it.started }?.positionMs
 
     companion object {
         private const val MAX_ENTRIES = 300
@@ -56,7 +56,7 @@ class WatchHistory(initial: List<WatchProgress>, private val save: (List<WatchPr
                 val shown = when {
                     entry.dismissed -> false
                     episode -> true
-                    else -> entry.nextUp || (!entry.finished && entry.fraction >= WatchProgress.STARTED_AT)
+                    else -> entry.nextUp || (!entry.finished && entry.started)
                 }
                 if (shown) result += entry
                 if (result.size == limit) break
