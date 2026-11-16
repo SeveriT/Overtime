@@ -52,6 +52,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -293,7 +294,13 @@ private fun LibraryHome(
                 RowSection("Continue watching") {
                     LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(continueWatching, key = { it.key }) { entry ->
-                            ContinueCard(entry, style, onPlay = { vm.resume(entry) }, onRemove = { vm.forget(entry) })
+                            val watched = entry.episodeId != null && entry.finished && !entry.nextUp
+                            ContinueCard(
+                                entry,
+                                style,
+                                onPlay = { if (watched) vm.openSeries(entry) else vm.resume(entry) },
+                                onRemove = { vm.forget(entry) },
+                            )
                         }
                     }
                 }
@@ -497,17 +504,28 @@ private fun ContinueCard(entry: WatchProgress, style: PosterStyle, onPlay: () ->
             )
             Box(Modifier.align(Alignment.TopEnd).padding(12.dp)) {
                 Badge(
-                    if (entry.nextUp) "Next up" else "${(entry.fraction * 100).toInt()}% watched",
+                    when {
+                        entry.nextUp -> "Next up"
+                        entry.finished -> "Watched"
+                        else -> "${(entry.fraction * 100).toInt()}% watched"
+                    },
                     container = scheme.scrim.copy(alpha = 0.7f),
                     content = Color.White,
                 )
             }
-            if (hovered) {
-                Box(Modifier.align(Alignment.TopStart).padding(8.dp)) {
-                    WithTooltip("Remove from Continue watching") {
-                        FilledTonalIconButton(onClick = onRemove, shapes = IconButtonDefaults.shapes(), modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(18.dp))
-                        }
+            // Always there (it used to appear only on hover and went unnoticed); stronger when hovered.
+            Box(Modifier.align(Alignment.TopStart).padding(8.dp)) {
+                WithTooltip("Remove from Continue watching") {
+                    FilledIconButton(
+                        onClick = onRemove,
+                        shapes = IconButtonDefaults.shapes(),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = scheme.scrim.copy(alpha = if (hovered) 0.85f else 0.55f),
+                            contentColor = Color.White,
+                        ),
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -520,7 +538,7 @@ private fun ContinueCard(entry: WatchProgress, style: PosterStyle, onPlay: () ->
                     Text(it, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            if (!entry.nextUp) {
+            if (!entry.nextUp && !entry.finished) {
                 LinearProgressIndicator(
                     progress = { entry.fraction },
                     color = scheme.error,

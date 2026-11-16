@@ -26,6 +26,15 @@ class WatchHistory(initial: List<WatchProgress>, private val save: (List<WatchPr
         save(_entries.value)
     }
 
+    /**
+     * Takes [key] off Continue watching but keeps its position. For an episode that hides the whole
+     * series, since only a series' newest entry is considered; watching it again brings the card back.
+     */
+    fun dismiss(key: String) {
+        _entries.value = _entries.value.map { if (it.key == key) it.copy(dismissed = true) else it }
+        save(_entries.value)
+    }
+
     /** Position to resume [key] from, or null to start at the beginning. */
     fun resumeAt(key: String): Long? =
         get(key)?.takeIf { !it.nextUp && !it.finished && it.fraction >= WatchProgress.STARTED_AT }?.positionMs
@@ -34,16 +43,22 @@ class WatchHistory(initial: List<WatchProgress>, private val save: (List<WatchPr
         private const val MAX_ENTRIES = 300
 
         /**
-         * What Continue watching shows, newest first: movies started but not finished, and for each series
-         * only its most recent entry — shown when that episode is in progress or queued as next up, hidden
-         * when it was finished with nothing queued after it.
+         * What Continue watching shows, newest first: movies started but not finished, and every series
+         * once, by its most recent entry — in progress, queued as next up, or finished (a series stays
+         * until it's dismissed). Dismissed entries are left out.
          */
         fun continueWatching(entries: List<WatchProgress>, limit: Int = 20): List<WatchProgress> {
             val seriesSeen = HashSet<String>()
             val result = ArrayList<WatchProgress>()
             for (entry in entries.sortedByDescending { it.updatedAt }) {
-                if (entry.episodeId != null && !seriesSeen.add("${entry.sourceId}:${entry.itemId}")) continue
-                if (entry.nextUp || (!entry.finished && entry.fraction >= WatchProgress.STARTED_AT)) result += entry
+                val episode = entry.episodeId != null
+                if (episode && !seriesSeen.add("${entry.sourceId}:${entry.itemId}")) continue
+                val shown = when {
+                    entry.dismissed -> false
+                    episode -> true
+                    else -> entry.nextUp || (!entry.finished && entry.fraction >= WatchProgress.STARTED_AT)
+                }
+                if (shown) result += entry
                 if (result.size == limit) break
             }
             return result

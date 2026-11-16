@@ -98,6 +98,8 @@ data class WatchProgress(
     val imdbId: String? = null,
     /** Queued automatically after the previous episode finished; not started yet. */
     val nextUp: Boolean = false,
+    /** Removed from Continue watching by the user; the saved position is kept for resuming. */
+    val dismissed: Boolean = false,
 ) {
     val fraction: Float get() = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val finished: Boolean get() = durationMs > 0 && fraction >= FINISHED_AT

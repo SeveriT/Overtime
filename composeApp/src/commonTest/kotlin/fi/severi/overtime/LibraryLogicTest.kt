@@ -38,10 +38,11 @@ class LibraryLogicTest {
         updatedAt: Long,
         series: String? = null,
         nextUp: Boolean = false,
+        dismissed: Boolean = false,
     ) = WatchProgress(
         key = key, sourceId = "s", kind = if (series == null) LibraryKind.MOVIES else LibraryKind.SERIES,
         itemId = series ?: key, title = key, extension = "mp4", positionMs = position, durationMs = 1000,
-        updatedAt = updatedAt, episodeId = if (series != null) key else null, nextUp = nextUp,
+        updatedAt = updatedAt, episodeId = if (series != null) key else null, nextUp = nextUp, dismissed = dismissed,
     )
 
     @Test
@@ -52,10 +53,27 @@ class LibraryLogicTest {
             entry("movie-done", 990, updatedAt = 30),      // finished
             entry("ep1", 990, updatedAt = 40, series = "show"),
             entry("ep2", 0, updatedAt = 41, series = "show", nextUp = true),
-            entry("other-ep3", 980, updatedAt = 50, series = "other"), // finished, nothing queued: hide series
+            entry("other-ep3", 980, updatedAt = 50, series = "other"), // finished: a series stays (as watched)
             entry("other-ep2", 400, updatedAt = 5, series = "other"),  // older entry of the same series: ignored
         )
-        assertEquals(listOf("ep2", "movie-half"), WatchHistory.continueWatching(entries).map { it.key })
+        assertEquals(listOf("other-ep3", "ep2", "movie-half"), WatchHistory.continueWatching(entries).map { it.key })
+    }
+
+    @Test
+    fun dismissedCardsStayGoneButKeepTheirPosition() {
+        val entries = listOf(
+            entry("movie-half", 500, updatedAt = 10, dismissed = true),
+            entry("ep5", 300, updatedAt = 40, series = "show", dismissed = true),
+            entry("ep4", 990, updatedAt = 30, series = "show"), // older episode must not bring the series back
+        )
+        assertEquals(emptyList(), WatchHistory.continueWatching(entries).map { it.key })
+
+        val history = WatchHistory(listOf(entry("movie-half", 500, updatedAt = 10)), save = {})
+        history.dismiss("movie-half")
+        assertEquals(500, history.resumeAt("movie-half"))
+        // Watching again clears it.
+        history.record(entry("movie-half", 600, updatedAt = 20))
+        assertEquals(listOf("movie-half"), WatchHistory.continueWatching(history.entries.value).map { it.key })
     }
 
     @Test

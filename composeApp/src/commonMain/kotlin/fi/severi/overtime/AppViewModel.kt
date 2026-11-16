@@ -408,7 +408,18 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         }
     }
 
-    fun forget(entry: WatchProgress) = history.remove(entry.key)
+    /** Removes a card from Continue watching (a series disappears until watched again). */
+    fun forget(entry: WatchProgress) = history.dismiss(entry.key)
+
+    /** A finished series card opens the series, to pick what to watch next. */
+    fun openSeries(entry: WatchProgress) {
+        library.select(
+            LibraryItem(
+                entry.itemId, LibraryKind.SERIES, entry.title, entry.poster, null, null, "", null,
+                tmdbId = entry.tmdbId, imdbId = entry.imdbId, backdrop = entry.backdrop,
+            ),
+        )
+    }
 
     private fun episodeEntry(sourceId: String, series: LibraryItem, details: SeriesDetails?, season: Season, episode: Episode) =
         WatchProgress(
@@ -535,7 +546,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         player.play(url, s.networkCachingMs, s.userAgent, rewindBufferMs = 0, startMs = resumeAt, onDemand = true)
         streamUrl.value = url
         awaitingStart = true
-        playingEntry = entry
+        playingEntry = entry.copy(dismissed = false)
         nextEpisode = next
         upNextDismissed.value = false
         upNext.value = next
