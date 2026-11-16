@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -259,45 +261,48 @@ private fun ColumnScope.GroupList(
     onOpen: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
 ) {
-    LazyColumn(Modifier.weight(1f), state = state, contentPadding = PaddingValues(bottom = 8.dp)) {
-        items(groups, key = { it.name }) { group ->
-            val playing = group.name == playingGroup
-            NavigationDrawerItem(
-                label = { Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                selected = playing,
-                onClick = { onOpen(group.name) },
-                icon = {
-                    when {
-                        playing -> Icon(Icons.Default.GraphicEq, contentDescription = "Playing")
-                        group.name == GROUP_ALL -> Icon(Icons.Outlined.GridView, contentDescription = null)
-                        group.name == GROUP_FAVORITES -> Icon(Icons.Default.Star, contentDescription = null, tint = FavoriteGold)
-                        else -> Icon(Icons.Outlined.LiveTv, contentDescription = null)
-                    }
-                },
-                badge = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(group.count.toString(), style = MaterialTheme.typography.labelLarge)
-                        // The source's own groups can be starred to sit at the top of the list.
-                        if (group.name != GROUP_ALL && group.name != GROUP_FAVORITES) {
-                            IconToggleButton(
-                                checked = group.favorite,
-                                onCheckedChange = { onToggleFavorite(group.name) },
-                                shapes = IconButtonDefaults.toggleableShapes(),
-                                colors = IconButtonDefaults.iconToggleButtonColors(checkedContentColor = FavoriteGold),
-                            ) {
-                                Icon(
-                                    if (group.favorite) Icons.Default.Star else Icons.Default.StarBorder,
-                                    contentDescription = if (group.favorite) "Unstar group" else "Star group",
-                                    modifier = Modifier.size(20.dp),
-                                )
+    Box(Modifier.weight(1f)) {
+        LazyColumn(Modifier.fillMaxSize(), state = state, contentPadding = PaddingValues(bottom = 8.dp)) {
+            items(groups, key = { it.name }) { group ->
+                val playing = group.name == playingGroup
+                NavigationDrawerItem(
+                    label = { Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    selected = playing,
+                    onClick = { onOpen(group.name) },
+                    icon = {
+                        when {
+                            playing -> Icon(Icons.Default.GraphicEq, contentDescription = "Playing")
+                            group.name == GROUP_ALL -> Icon(Icons.Outlined.GridView, contentDescription = null)
+                            group.name == GROUP_FAVORITES -> Icon(Icons.Default.Star, contentDescription = null, tint = FavoriteGold)
+                            else -> Icon(Icons.Outlined.LiveTv, contentDescription = null)
+                        }
+                    },
+                    badge = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(group.count.toString(), style = MaterialTheme.typography.labelLarge)
+                            // The source's own groups can be starred to sit at the top of the list.
+                            if (group.name != GROUP_ALL && group.name != GROUP_FAVORITES) {
+                                IconToggleButton(
+                                    checked = group.favorite,
+                                    onCheckedChange = { onToggleFavorite(group.name) },
+                                    shapes = IconButtonDefaults.toggleableShapes(),
+                                    colors = IconButtonDefaults.iconToggleButtonColors(checkedContentColor = FavoriteGold),
+                                ) {
+                                    Icon(
+                                        if (group.favorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                        contentDescription = if (group.favorite) "Unstar group" else "Star group",
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
                             }
                         }
-                    }
-                },
-                colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
-                modifier = Modifier.padding(ItemPadding),
-            )
+                    },
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
+                    modifier = Modifier.padding(ItemPadding),
+                )
+            }
         }
+        ListScrollbar(state, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
     }
 }
 
@@ -322,24 +327,27 @@ private fun ColumnScope.ChannelList(
     }
     LaunchedEffect(query) { if (query.isNotBlank()) listState.scrollToItem(0) }
 
-    LazyColumn(
-        Modifier.weight(1f),
-        state = listState,
-        contentPadding = PaddingValues(bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        items(channels, key = { it.id }) { channel ->
-            val (now, _) = remember(channel.id, clock, epg) { vm.nowNext(channel, clock) }
-            ChannelRow(
-                channel = channel,
-                subtitle = now?.title ?: channel.group.takeIf { showGroupList },
-                progress = now?.let { (clock - it.start).toFloat() / (it.stop - it.start).coerceAtLeast(1) },
-                selected = channel.id == current?.id,
-                favorite = channel.id in favorites,
-                onClick = { vm.play(channel) },
-                onToggleFavorite = { vm.toggleFavorite(channel) },
-            )
+    Box(Modifier.weight(1f)) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = PaddingValues(bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            items(channels, key = { it.id }) { channel ->
+                val (now, _) = remember(channel.id, clock, epg) { vm.nowNext(channel, clock) }
+                ChannelRow(
+                    channel = channel,
+                    subtitle = now?.title ?: channel.group.takeIf { showGroupList },
+                    progress = now?.let { (clock - it.start).toFloat() / (it.stop - it.start).coerceAtLeast(1) },
+                    selected = channel.id == current?.id,
+                    favorite = channel.id in favorites,
+                    onClick = { vm.play(channel) },
+                    onToggleFavorite = { vm.toggleFavorite(channel) },
+                )
+            }
         }
+        ListScrollbar(listState, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
     }
 }
 

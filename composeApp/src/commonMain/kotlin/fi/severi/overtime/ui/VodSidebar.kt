@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -100,70 +102,74 @@ fun VodSidebar(vm: AppViewModel, onOpenSettings: () -> Unit, modifier: Modifier 
         }
         val season = seasons.getOrNull(seasonIndex)
 
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val item = ctx?.item
-                    val (hero, _) = if (item != null) {
-                        artFor(style, item.kind, item.tmdbId ?: ctx.movie?.tmdbId ?: series?.tmdbId, item.imdbId ?: ctx.movie?.imdbId ?: series?.imdbId,
-                            landscape = true, fallback = ctx.movie?.backdrop ?: series?.backdrop ?: item.backdrop ?: item.poster)
-                    } else {
-                        (playback?.poster) to false
-                    }
-                    Box(
-                        Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaterialTheme.shapes.large).background(scheme.surfaceContainerHigh),
-                    ) {
-                        if (hero != null) Artwork(hero, contentDescription = null, modifier = Modifier.fillMaxSize())
-                    }
-                    Text(playback?.title ?: item?.name.orEmpty(), style = MaterialTheme.typography.titleLargeEmphasized)
-                    playback?.subtitle?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = scheme.primary) }
-                    val meta = listOfNotNull(item?.year, ctx?.movie?.duration, item?.rating?.let { "★ ${it.take(3)}" })
-                    if (meta.isNotEmpty()) {
-                        Text(meta.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
-                    }
-                    (ctx?.movie?.genre ?: series?.genre)?.let {
-                        Text(it, style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
-                    }
-                }
-            }
-
-            when {
-                ctx == null -> Unit
-                ctx.item.kind == LibraryKind.MOVIES -> ctx.movie?.let { movie ->
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            movie.plot?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                            movie.cast?.let {
-                                Text("Cast", style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
-                                Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
-                            }
+        val listState = rememberLazyListState()
+        Box(Modifier.weight(1f)) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val item = ctx?.item
+                        val (hero, _) = if (item != null) {
+                            artFor(style, item.kind, item.tmdbId ?: ctx.movie?.tmdbId ?: series?.tmdbId, item.imdbId ?: ctx.movie?.imdbId ?: series?.imdbId,
+                                landscape = true, fallback = ctx.movie?.backdrop ?: series?.backdrop ?: item.backdrop ?: item.poster)
+                        } else {
+                            (playback?.poster) to false
+                        }
+                        Box(
+                            Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaterialTheme.shapes.large).background(scheme.surfaceContainerHigh),
+                        ) {
+                            if (hero != null) Artwork(hero, contentDescription = null, modifier = Modifier.fillMaxSize())
+                        }
+                        Text(playback?.title ?: item?.name.orEmpty(), style = MaterialTheme.typography.titleLargeEmphasized)
+                        playback?.subtitle?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = scheme.primary) }
+                        val meta = listOfNotNull(item?.year, ctx?.movie?.duration, item?.rating?.let { "★ ${it.take(3)}" })
+                        if (meta.isNotEmpty()) {
+                            Text(meta.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+                        }
+                        (ctx?.movie?.genre ?: series?.genre)?.let {
+                            Text(it, style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
                         }
                     }
-                } ?: item { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { LoadingIndicator() } }
-                series == null -> item { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { LoadingIndicator() } }
-                else -> {
-                    if (seasons.size > 1) {
+                }
+
+                when {
+                    ctx == null -> Unit
+                    ctx.item.kind == LibraryKind.MOVIES -> ctx.movie?.let { movie ->
                         item {
-                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                seasons.forEachIndexed { index, s ->
-                                    FilterChip(selected = index == seasonIndex, onClick = { seasonIndex = index }, label = { Text(s.name) })
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                movie.plot?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                                movie.cast?.let {
+                                    Text("Cast", style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+                                    Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                         }
-                    }
-                    if (season != null) {
-                        items(season.episodes, key = { it.id }) { episode ->
-                            val progress = history.firstOrNull { it.key == "e:${ctx.sourceId}:${episode.id}" }
-                            SidebarEpisode(
-                                episode = episode,
-                                playing = episode.id == ctx.episodeId,
-                                progress = progress,
-                                onPlay = { vm.playEpisode(ctx.item, series, season, episode) },
-                            )
+                    } ?: item { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { LoadingIndicator() } }
+                    series == null -> item { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { LoadingIndicator() } }
+                    else -> {
+                        if (seasons.size > 1) {
+                            item {
+                                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    seasons.forEachIndexed { index, s ->
+                                        FilterChip(selected = index == seasonIndex, onClick = { seasonIndex = index }, label = { Text(s.name) })
+                                    }
+                                }
+                            }
+                        }
+                        if (season != null) {
+                            items(season.episodes, key = { it.id }) { episode ->
+                                val progress = history.firstOrNull { it.key == "e:${ctx.sourceId}:${episode.id}" }
+                                SidebarEpisode(
+                                    episode = episode,
+                                    playing = episode.id == ctx.episodeId,
+                                    progress = progress,
+                                    onPlay = { vm.playEpisode(ctx.item, series, season, episode) },
+                                )
+                            }
                         }
                     }
                 }
             }
+            ListScrollbar(listState, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
         }
     }
 }
