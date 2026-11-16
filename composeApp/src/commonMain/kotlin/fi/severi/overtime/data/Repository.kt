@@ -51,6 +51,12 @@ class Repository(private val store: FileStore) {
         }.getOrNull()?.toMutableMap() ?: mutableMapOf()
     }
     private val artLock = Any()
+    private val leadingNumber = Regex("""^\s*\d{1,3}[\s._-]+""")
+
+    /** Misses already asked with the current search; saved with the cache so they aren't asked again. */
+    private val artMissesChecked: MutableSet<String> by lazy {
+        runCatching { store.readText(LOCAL_ART_MISSES)?.lines()?.filter { it.isNotBlank() }?.toMutableSet() }.getOrNull() ?: mutableSetOf()
+    }
     private val editionWords = Regex(
         """(?i)\b(extended( cut| edition)?|director'?s cut|theatrical( cut)?|uncut|unrated|remastered|superfan( episodes)?|special edition|complete( series)?)\b""",
     )
@@ -61,15 +67,25 @@ class Repository(private val store: FileStore) {
      */
     suspend fun localArtwork(kind: LibraryKind, title: String, year: String?): LocalArt? = withContext(Dispatchers.Default) {
         val key = "${kind.name}|${title.lowercase()}|${year.orEmpty()}"
-        synchronized(artLock) { if (key in artCache) return@withContext artCache[key] }
+        // A miss cached by an older, weaker search is asked again once.
+        synchronized(artLock) {
+            if (key in artCache && (artCache[key] != null || key in artMissesChecked)) return@withContext artCache[key]
+        }
         val type = if (kind == LibraryKind.MOVIES) "movie" else "series"
         suspend fun search(text: String) = json.parseToJsonElement(
             client.get("https://v3-cinemeta.strem.io/catalog/$type/top/search=${text.encodeURLPathPart()}.json").bodyAsText(),
         ).jsonObject["metas"]?.jsonArray.orEmpty().map { it.jsonObject }
         val found = runCatching {
-            // "The Office Extended Cut" isn't a title of its own: retry without edition words.
+            // Fallbacks when the full name finds nothing: without edition words ("The Office Extended Cut"),
+            // and without a collection number in front ("5 Vares - Sukkanauhakäärme").
             val plain = editionWords.replace(title, " ").replace(Regex("""\s+"""), " ").trim()
-            val metas = search(title).ifEmpty { if (plain != title && plain.isNotEmpty()) search(plain) else emptyList() }
+            val candidates = listOf(title, plain, leadingNumber.replace(title, ""), leadingNumber.replace(plain, ""))
+                .map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            var metas = emptyList<kotlinx.serialization.json.JsonObject>()
+            for (candidate in candidates) {
+                metas = search(candidate)
+                if (metas.isNotEmpty()) break
+            }
             // Same year first (releaseInfo is "2010" or "2005-2013"), otherwise the best match.
             val pick = metas.firstOrNull { meta -> year != null && meta["releaseInfo"]?.jsonPrimitive?.contentOrNull?.startsWith(year) == true }
                 ?: metas.firstOrNull()
@@ -85,7 +101,9 @@ class Repository(private val store: FileStore) {
         }.getOrElse { return@withContext null } // offline or a hiccup: try again next scan, don't cache
         synchronized(artLock) {
             artCache[key] = found
+            if (found == null) artMissesChecked += key
             runCatching { store.writeText(LOCAL_ART, json.encodeToString(artCache.toMap())) }
+            if (found == null) runCatching { store.writeText(LOCAL_ART_MISSES, artMissesChecked.joinToString("\n")) }
         }
         found
     }
@@ -219,6 +237,9 @@ class Repository(private val store: FileStore) {
     private companion object {
         const val SETTINGS = "settings.json"
         const val LOCAL_ART = "local_art.json"
+
+        /** Bumped name when the search improves, so older misses are retried once. */
+        const val LOCAL_ART_MISSES = "local_art_misses_v2.txt"
         const val SOURCES = "sources.json"
         const val PROGRESS = "progress.json"
         const val MAX_GUIDES = 8
