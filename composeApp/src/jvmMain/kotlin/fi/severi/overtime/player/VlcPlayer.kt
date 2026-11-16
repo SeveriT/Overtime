@@ -630,15 +630,19 @@ actual fun VideoSurface(player: VideoPlayer, modifier: Modifier) {
     // The RGB fallback path gets the same adjustments as a colour matrix.
     val colorFilter = remember(adjust) { if (adjust.isDefault) null else ColorFilter.colorMatrix(adjust.toColorMatrix()) }
     Canvas(modifier) {
+        // Read both frame sources before choosing a path: usingYuv isn't observable state, and at start-up
+        // the first draw happens before VLC picks the YUV path. Reading only the RGB frame then meant new
+        // YUV frames never redrew the picture (black until the window was resized).
+        @Suppress("UNUSED_EXPRESSION") yuvVersion
+        val rgbFrame = frame
         if (vlc.usingYuv) {
-            @Suppress("UNUSED_EXPRESSION") yuvVersion // read here so each new frame redraws
             val renderer = vlc.yuv
             if (renderer.width == 0 || !renderer.hasFrame) return@Canvas
             val r = videoRect(size, renderer.width, renderer.height, vlc.pixelAspect)
             drawIntoCanvas { renderer.draw(it.skiaCanvas, r.left, r.top, r.width / renderer.width, r.height / renderer.height, adjust) }
             return@Canvas
         }
-        val image = frame ?: return@Canvas
+        val image = rgbFrame ?: return@Canvas
         val r = videoRect(size, image.width, image.height, vlc.pixelAspect)
         drawImage(
             image = image,
