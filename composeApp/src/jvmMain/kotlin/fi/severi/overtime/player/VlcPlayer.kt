@@ -492,7 +492,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
 
     override fun setVolume(volume: Int) {
         this.volume = volume.coerceIn(0, 100)
-        player.audio().setVolume(this.volume)
+        player.audio().setVolume(vlcVolume(this.volume))
     }
 
     override fun toggleMute() {
@@ -538,7 +538,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
             player = newPlayer(factory)
             oldPlayer.release()
             oldFactory.release()
-            player.audio().setVolume(volume)
+            player.audio().setVolume(vlcVolume(volume))
             if (s.muted) player.audio().setMute(true)
 
             if (request == null || s.error != null || s.ended) return
@@ -564,6 +564,14 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
     }
 
     private companion object {
+        /**
+         * VLC cubes its volume before handing it to the Windows session volume, which is already shaped
+         * to hearing; together most of the slider was near-silent and the change all came at the top,
+         * so it felt late. Taking the cube root cancels VLC's curve: the slider sets the same value the
+         * Windows volume mixer shows (50 here = 50 there).
+         */
+        fun vlcVolume(volume: Int): Int = (Math.cbrt(volume / 100.0) * 100).roundToInt().coerceIn(0, 100)
+
         const val TICK_MS = 500L
         const val TRACK_RESTORE_DELAY_MS = 400L
         const val MAX_KEYFRAME_SLACK_MS = 10_000L
