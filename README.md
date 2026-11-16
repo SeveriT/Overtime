@@ -23,10 +23,12 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 - Rated poster artwork
 - Poster size options (small, medium, large)
 - Mini player while browsing
+- Local files: your own movies and series from folders, with artwork
 
 ### Player
 - Smooth 4K playback
 - Audio and subtitle track selection
+- Default subtitle language
 - Subtitle style: font, size, edge, colour and bold
 - Picture settings: brightness, contrast and saturation
 - Stream info: resolution, frame rate, codec, bitrate and more, with copy stream URL
