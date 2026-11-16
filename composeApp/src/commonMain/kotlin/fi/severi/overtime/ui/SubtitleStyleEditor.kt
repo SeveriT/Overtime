@@ -1,6 +1,23 @@
 package fi.severi.overtime.ui
 
 import androidx.compose.foundation.background
+import fi.severi.overtime.model.SubtitleLanguage
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,6 +57,42 @@ private val SubtitleColors = listOf(
     ColorPreset("Cyan", Color(0xFF7FE7FF)),
     ColorPreset("Green", Color(0xFFA8F0A0)),
 )
+
+/** Which subtitles to turn on for movies and episodes: Off (the file's own default) or a language. */
+@Composable
+internal fun SubtitleLanguagePicker(language: SubtitleLanguage?, onPick: (SubtitleLanguage?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text("Default subtitle language", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "Turned on for movies and episodes that have it.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Box {
+            FilledTonalButton(onClick = { open = true }, shapes = ButtonDefaults.shapes()) {
+                Text(language?.label ?: "Off")
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = MaterialTheme.shapes.large) {
+                (listOf<SubtitleLanguage?>(null) + SubtitleLanguage.entries).forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option?.label ?: "Off") },
+                        onClick = {
+                            onPick(option)
+                            open = false
+                        },
+                        leadingIcon = {
+                            if (option == language) Icon(Icons.Default.Check, contentDescription = "Selected") else Spacer(Modifier.size(24.dp))
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
 
 /** Settings rows for the subtitle look, with a live preview on top. */
 @Composable

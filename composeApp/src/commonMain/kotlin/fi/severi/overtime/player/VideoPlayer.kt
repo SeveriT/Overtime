@@ -6,6 +6,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import fi.severi.overtime.model.PictureAdjust
+import fi.severi.overtime.model.SubtitleLanguage
 import fi.severi.overtime.model.SubtitleStyle
 import kotlinx.coroutines.flow.StateFlow
 
@@ -124,6 +125,9 @@ interface VideoPlayer {
 
     /** Restyles subtitles; whatever is playing carries on from the same spot. */
     fun setSubtitleStyle(style: SubtitleStyle) = Unit
+
+    /** Subtitles to turn on for movies and episodes when available; null leaves the player's choice. */
+    fun setSubtitleLanguage(language: SubtitleLanguage?) = Unit
 
     /** Brightness, contrast and saturation for every video surface; applies immediately. */
     fun setPicture(adjust: PictureAdjust) = Unit

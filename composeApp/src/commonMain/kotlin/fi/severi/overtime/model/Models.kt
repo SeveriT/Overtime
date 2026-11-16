@@ -132,6 +132,8 @@ data class AppSettings(
     val favoriteGroups: Set<String> = emptySet(),
     val volume: Int = 100,
     val subtitles: SubtitleStyle = SubtitleStyle(),
+    /** Subtitles to turn on for movies and episodes when the file has them; null leaves VLC's choice. */
+    val subtitleLanguage: SubtitleLanguage? = null,
     /** Keyboard shortcuts the user changed, by Shortcut name; anything missing uses the default keys. */
     val shortcuts: Map<String, List<KeyCombo>> = emptyMap(),
     val picture: PictureAdjust = PictureAdjust(),
@@ -146,6 +148,39 @@ data class AppSettings(
 @Serializable
 data class PictureAdjust(val brightness: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f) {
     val isDefault: Boolean get() = this == PictureAdjust()
+}
+
+/**
+ * A subtitle language: its ISO 639 codes (VLC matches tagged tracks by these) and the names a track
+ * might carry instead when it isn't tagged.
+ */
+@Serializable
+enum class SubtitleLanguage(val label: String, val codes: List<String>, val native: String) {
+    ENGLISH("English", listOf("en", "eng"), "English"),
+    FINNISH("Finnish", listOf("fi", "fin"), "Suomi"),
+    SWEDISH("Swedish", listOf("sv", "swe"), "Svenska"),
+    NORWEGIAN("Norwegian", listOf("no", "nor", "nob", "nb"), "Norsk"),
+    DANISH("Danish", listOf("da", "dan"), "Dansk"),
+    ESTONIAN("Estonian", listOf("et", "est"), "Eesti"),
+    GERMAN("German", listOf("de", "ger", "deu"), "Deutsch"),
+    FRENCH("French", listOf("fr", "fre", "fra"), "Français"),
+    SPANISH("Spanish", listOf("es", "spa"), "Español"),
+    ITALIAN("Italian", listOf("it", "ita"), "Italiano"),
+    DUTCH("Dutch", listOf("nl", "dut", "nld"), "Nederlands"),
+    PORTUGUESE("Portuguese", listOf("pt", "por"), "Português"),
+    POLISH("Polish", listOf("pl", "pol"), "Polski"),
+    RUSSIAN("Russian", listOf("ru", "rus"), "Русский"),
+    TURKISH("Turkish", listOf("tr", "tur"), "Türkçe"),
+    ARABIC("Arabic", listOf("ar", "ara"), "العربية"),
+    ;
+
+    /** Whether a track name like "Track 3 - [Finnish]", "Suomi" or "fin" is this language. */
+    fun matches(trackName: String): Boolean {
+        val name = trackName.lowercase()
+        if (name.contains(label.lowercase()) || name.contains(native.lowercase())) return true
+        val words = name.split(Regex("[^\\p{L}]+")).filter { it.isNotEmpty() }
+        return codes.any { it in words }
+    }
 }
 
 /** How VLC draws plain-text subtitles (SRT and the like); styled ASS subtitles keep their own look. */

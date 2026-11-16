@@ -260,6 +260,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     init {
         player.setVolume(_settings.value.volume)
         player.setPicture(picture.value)
+        player.setSubtitleLanguage(_settings.value.subtitleLanguage)
         scope.launch {
             while (true) {
                 delay(30_000)
@@ -786,6 +787,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         _settings.value = after
         settingsDirty.trySend(Unit)
         if (after.subtitles != before.subtitles) scope.launch { player.setSubtitleStyle(after.subtitles) }
+        if (after.subtitleLanguage != before.subtitleLanguage) player.setSubtitleLanguage(after.subtitleLanguage)
         if (after.userAgent != before.userAgent) repo.setUserAgent(after.userAgent)
         // Recording starts with playback, so turning rewind on or off restarts the current channel.
         if (after.rewindEnabled != before.rewindEnabled || after.rewindMinutes != before.rewindMinutes) {

@@ -1,6 +1,7 @@
 package fi.severi.overtime.player
 
 import fi.severi.overtime.model.PictureAdjust
+import fi.severi.overtime.model.SubtitleLanguage
 import fi.severi.overtime.model.SubtitleStyle
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -131,6 +132,13 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
     private val events = object : MediaPlayerEventAdapter() {
         override fun playing(mediaPlayer: MediaPlayer) {
             if (runningSince == 0L) runningSince = System.currentTimeMillis()
+            if (subtitleCheckPending) {
+                subtitleCheckPending = false
+                scope.launch {
+                    delay(TRACK_RESTORE_DELAY_MS * 3)
+                    pickSubtitleLanguage()
+                }
+            }
             pendingTracks?.let { (audio, subtitle) ->
                 pendingTracks = null
                 // Not from VLC's event thread; give the tracks a moment to be listed.
@@ -216,6 +224,25 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
     /** Seek position is only meaningful for movies and episodes; live HLS reports a sliding "length". */
     @Volatile private var onDemand = false
 
+    @Volatile private var subtitleLanguage: SubtitleLanguage? = null
+
+    /** Look for the preferred subtitles once the newly started movie or episode is playing. */
+    @Volatile private var subtitleCheckPending = false
+
+    override fun setSubtitleLanguage(language: SubtitleLanguage?) {
+        subtitleLanguage = language
+    }
+
+    /**
+     * Turns on the preferred subtitles if VLC didn't: tracks that aren't tagged with a language only carry
+     * a name ("Finnish", "Suomi"), which the sub-language option can't see.
+     */
+    private fun pickSubtitleLanguage() {
+        val language = subtitleLanguage ?: return
+        val match = player.subpictures().trackDescriptions().firstOrNull { it.id() >= 0 && language.matches(it.description()) } ?: return
+        if (player.subpictures().track() != match.id()) player.subpictures().setTrack(match.id())
+    }
+
     /** Brightness, contrast and saturation, applied by the surfaces while drawing. */
     internal val picture = MutableStateFlow(PictureAdjust())
 
@@ -266,11 +293,14 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
     }
 
     private fun playDirect(url: String, networkCachingMs: Int, userAgent: String, startMs: Long = 0) {
+        val language = subtitleLanguage?.takeIf { onDemand }
         val options = listOfNotNull(
             ":network-caching=$networkCachingMs",
             ":http-user-agent=$userAgent",
             // Resume part-way into an on-demand file.
             if (startMs > 0) ":start-time=${startMs / 1000.0}" else null,
+            // VLC picks a subtitle track tagged with one of these codes by itself.
+            language?.let { ":sub-language=" + it.codes.joinToString(",") },
         )
         player.media().play(url, *options.toTypedArray())
     }
@@ -440,6 +470,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
             endSession()
             this.onDemand = onDemand
             lastPlay = PlayRequest(url, networkCachingMs, userAgent)
+            subtitleCheckPending = onDemand && subtitleLanguage != null
             pixelAspect = 1f
             pendingTracks = null
             shownLive = 0L
@@ -543,6 +574,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
 
             if (request == null || s.error != null || s.ended) return
             pendingTracks = tracks
+            subtitleCheckPending = false
             val rec = recorder
             when {
                 // Recording live: carry on from the same moment in the buffer, which is kept.
