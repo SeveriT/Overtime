@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -292,16 +293,20 @@ private fun LibraryHome(
         if (continueWatching.isNotEmpty()) {
             item(key = "continue") {
                 RowSection("Continue watching") {
-                    LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(continueWatching, key = { it.key }) { entry ->
-                            val watched = entry.episodeId != null && entry.finished && !entry.nextUp
-                            ContinueCard(
-                                entry,
-                                style,
-                                onPlay = { if (watched) vm.openSeries(entry) else vm.resume(entry) },
-                                onRemove = { vm.forget(entry) },
-                            )
+                    val rowState = rememberLazyListState()
+                    Box(Modifier.fillMaxWidth()) {
+                        LazyRow(state = rowState, contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            items(continueWatching, key = { it.key }) { entry ->
+                                val watched = entry.episodeId != null && entry.finished && !entry.nextUp
+                                ContinueCard(
+                                    entry,
+                                    style,
+                                    onPlay = { if (watched) vm.openSeries(entry) else vm.resume(entry) },
+                                    onRemove = { vm.forget(entry) },
+                                )
+                            }
                         }
+                        RowScrollArrows(rowState, viewportWidth = { rowState.layoutInfo.viewportSize.width })
                     }
                 }
             }
@@ -314,17 +319,21 @@ private fun LibraryHome(
                 title = name,
                 onSeeAll = if (list != null && list.size > 1) ({ vm.library.openCategory(id) }) else null,
             ) {
-                LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (list == null) {
-                        // Placeholders while the row loads.
-                        items(6) { PosterPlaceholder(style) }
-                    } else {
-                        items(list.take(ROW_ITEMS), key = { "${it.kind}:${it.id}" }) { item ->
-                            PosterCard(item, style, selected = item.id == selected?.id, progress = progressOf(item)) {
-                                vm.library.select(item)
+                val rowState = rememberLazyListState()
+                Box(Modifier.fillMaxWidth()) {
+                    LazyRow(state = rowState, contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (list == null) {
+                            // Placeholders while the row loads.
+                            items(6) { PosterPlaceholder(style) }
+                        } else {
+                            items(list.take(ROW_ITEMS), key = { "${it.kind}:${it.id}" }) { item ->
+                                PosterCard(item, style, selected = item.id == selected?.id, progress = progressOf(item)) {
+                                    vm.library.select(item)
+                                }
                             }
                         }
                     }
+                    RowScrollArrows(rowState, viewportWidth = { rowState.layoutInfo.viewportSize.width })
                 }
             }
         }
@@ -698,10 +707,14 @@ private fun LibraryDetails(vm: AppViewModel, item: LibraryItem, style: PosterSty
                 item { SeriesInfo(details) }
                 if (seasons.size > 1) {
                     item {
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            seasons.forEachIndexed { index, s ->
-                                FilterChip(selected = index == seasonIndex, onClick = { seasonIndex = index }, label = { Text(s.name) })
+                        val seasonScroll = rememberScrollState()
+                        Box(Modifier.fillMaxWidth()) {
+                            Row(Modifier.horizontalScroll(seasonScroll), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                seasons.forEachIndexed { index, s ->
+                                    FilterChip(selected = index == seasonIndex, onClick = { seasonIndex = index }, label = { Text(s.name) })
+                                }
                             }
+                            RowScrollArrows(seasonScroll, viewportWidth = { seasonScroll.viewportSize }, size = 32.dp)
                         }
                     }
                 }
