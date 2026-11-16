@@ -98,6 +98,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fi.severi.overtime.AppViewModel
@@ -654,11 +655,21 @@ private fun KeyCap(key: String) {
     // Fixed size so the key never gets squeezed or clipped by the button around it.
     Box(
         Modifier
-            .size(18.dp)
+            .size(20.dp)
             .border(1.dp, LocalContentColor.current.copy(alpha = 0.6f), RoundedCornerShape(4.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(key, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
+        // Trim the line's extra space above and below so a capital sits in the middle of the box
+        // (by default the room for descenders pushed it down onto the border).
+        Text(
+            key,
+            style = MaterialTheme.typography.labelSmall.copy(
+                lineHeight = MaterialTheme.typography.labelSmall.fontSize,
+                lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+            ),
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
