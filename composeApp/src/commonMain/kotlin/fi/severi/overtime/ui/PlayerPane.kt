@@ -82,6 +82,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -488,17 +489,47 @@ private fun ToolbarButtons(
     onDemand: Boolean,
     compact: Boolean,
 ) {
-    val canSkip = timeshift != null || media != null
-    // Movies seek with plain arrows; live TV uses Shift so the arrows can change channel.
-    val skipKey = if (onDemand) "" else "Shift+"
-    val navigation: @Composable () -> Unit = {
+    val args = ToolbarArgs(
+        paused = paused,
+        muted = muted,
+        volume = volume,
+        fullscreen = fullscreen,
+        sidebarVisible = sidebarVisible,
+        timeshift = timeshift,
+        onDemand = onDemand,
+        canSkip = timeshift != null || media != null,
+        // Movies seek with plain arrows; live TV uses Shift so the arrows can change channel.
+        skipKey = if (onDemand) "" else "Shift+",
+    )
+    // Movable, so a narrow window switching between one and two rows moves the buttons instead of
+    // rebuilding them: rebuilding the button under the mouse (e.g. Show sidebar, which narrows the
+    // player) tore down its tooltip mid-click and Compose failed with "RootNodeOwner is already disposed".
+    val navigation = remember(vm) { movableContentOf { a: ToolbarArgs ->
+        val paused = a.paused
+        val muted = a.muted
+        val volume = a.volume
+        val fullscreen = a.fullscreen
+        val sidebarVisible = a.sidebarVisible
+        val timeshift = a.timeshift
+        val onDemand = a.onDemand
+        val canSkip = a.canSkip
+        val skipKey = a.skipKey
             ToolbarButton(
                 if (sidebarVisible) Icons.AutoMirrored.Filled.MenuOpen else Icons.Default.Menu,
                 if (sidebarVisible) "Hide sidebar (S)" else "Show sidebar (S)",
             ) { vm.toggleSidebar() }
             if (!onDemand) ToolbarButton(Icons.Outlined.ViewTimeline, "Programme guide (G)") { vm.openGuide() }
-    }
-    val transport: @Composable () -> Unit = {
+    } }
+    val transport = remember(vm) { movableContentOf { a: ToolbarArgs ->
+        val paused = a.paused
+        val muted = a.muted
+        val volume = a.volume
+        val fullscreen = a.fullscreen
+        val sidebarVisible = a.sidebarVisible
+        val timeshift = a.timeshift
+        val onDemand = a.onDemand
+        val canSkip = a.canSkip
+        val skipKey = a.skipKey
             if (!onDemand) ToolbarButton(Icons.Default.SkipPrevious, "Previous channel (←)") { vm.step(-1) }
             if (canSkip) {
                 ToolbarButton(Icons.Default.Replay10, "Back 10 seconds (${skipKey}←)") { vm.seekBy(-REWIND_STEP_MS) }
@@ -531,8 +562,17 @@ private fun ToolbarButtons(
             ToolbarButton(Icons.Default.Stop, if (onDemand) "Stop and open Movies & series" else "Stop") {
                 if (onDemand) vm.stopToLibrary() else vm.stopPlayback()
             }
-    }
-    val outputs: @Composable () -> Unit = {
+    } }
+    val outputs = remember(vm) { movableContentOf { a: ToolbarArgs ->
+        val paused = a.paused
+        val muted = a.muted
+        val volume = a.volume
+        val fullscreen = a.fullscreen
+        val sidebarVisible = a.sidebarVisible
+        val timeshift = a.timeshift
+        val onDemand = a.onDemand
+        val canSkip = a.canSkip
+        val skipKey = a.skipKey
 
             WithTooltip(if (muted) "Unmute (M)" else "Mute (M)") {
                 FilledTonalIconToggleButton(
@@ -551,27 +591,27 @@ private fun ToolbarButtons(
                 if (fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                 if (fullscreen) "Exit fullscreen (F)" else "Fullscreen (F)",
             ) { vm.toggleFullscreen() }
-    }
+    } }
     val divider: @Composable () -> Unit = {
         VerticalDivider(Modifier.size(width = 1.dp, height = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
     }
     if (compact) {
         // Narrow window: playback controls on their own row, the rest below.
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { transport() }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { transport(args) }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                navigation()
+                navigation(args)
                 divider()
-                outputs()
+                outputs(args)
             }
         }
     } else {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            navigation()
+            navigation(args)
             divider()
-            transport()
+            transport(args)
             divider()
-            outputs()
+            outputs(args)
         }
     }
 }
@@ -770,6 +810,19 @@ private fun TrackSection(title: String, tracks: List<MediaTrack>, selected: Int?
         )
     }
 }
+
+/** What the toolbar buttons show, passed into their movable content. */
+private data class ToolbarArgs(
+    val paused: Boolean,
+    val muted: Boolean,
+    val volume: Int,
+    val fullscreen: Boolean,
+    val sidebarVisible: Boolean,
+    val timeshift: TimeshiftState?,
+    val onDemand: Boolean,
+    val canSkip: Boolean,
+    val skipKey: String,
+)
 
 @Composable
 private fun ToolbarButton(icon: ImageVector, tooltip: String, enabled: Boolean = true, onClick: () -> Unit) {
