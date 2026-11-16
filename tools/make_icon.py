@@ -1,8 +1,8 @@
 """Generates the Overtime app icon: a master PNG, the window icon PNG and a multi-size Windows ICO.
 
-Design: the Material Icons "live_tv" glyph (Rounded: a TV with antennas and a play triangle) in white, on
-a rounded square in the app's default sidebar / title bar colour. It is the same icon the Android app shows
-for Live TV, so both apps share one look.
+Design: the Material Icons "live_tv" glyph (Rounded: a TV with antennas and a play triangle) in near black
+(#0A0A0B) on a light blue (#8AD0F2) rounded square. It is the same icon the Android app shows for Live TV,
+and the Android launcher icon uses the same colours, so both apps share one look.
 
 Glyph source (Apache 2.0, Compose material-icons-extended Icons.Rounded.LiveTv): tools/symbols/live_tv_rounded_24px.svg
 
@@ -18,8 +18,8 @@ ICON_DIR = ROOT / "composeApp" / "icons"
 RES_DIR = ROOT / "composeApp" / "src" / "jvmMain" / "resources"
 SYMBOLS = Path(__file__).resolve().parent / "symbols"
 
-BACKGROUND = (25, 28, 32)     # the app's default sidebar / title bar colour (#191C20)
-GLYPH = (255, 255, 255)
+BACKGROUND = (0x8A, 0xD0, 0xF2)  # light blue (#8AD0F2), chosen by the user
+GLYPH = (0x0A, 0x0A, 0x0B)       # near black (#0A0A0B)
 
 ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
 SMALL_MAX = 32                # sizes up to this use the 20 px optical size
