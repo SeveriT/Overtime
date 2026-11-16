@@ -86,6 +86,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.AlignmentLine
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
@@ -98,7 +103,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fi.severi.overtime.AppViewModel
@@ -652,26 +656,28 @@ internal fun UpNextCard(
 /** A small keyboard-key label, e.g. the shortcut on a button. */
 @Composable
 private fun KeyCap(key: String) {
-    // Fixed size so the key never gets squeezed or clipped by the button around it.
-    Box(
-        Modifier
+    val style = MaterialTheme.typography.labelSmall
+    val density = LocalDensity.current
+    // Centred by the letter itself, not by its text line: the middle of the capital (its baseline less
+    // half the cap height) goes to the middle of the box. Line-box centring left it sitting low.
+    val capHeightPx = with(density) { style.fontSize.toPx() } * CAP_HEIGHT_RATIO
+    Layout(
+        content = { Text(key, style = style, maxLines = 1, softWrap = false) },
+        modifier = Modifier
             .size(20.dp)
             .border(1.dp, LocalContentColor.current.copy(alpha = 0.6f), RoundedCornerShape(4.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        // Trim the line's extra space above and below so a capital sits in the middle of the box
-        // (by default the room for descenders pushed it down onto the border).
-        Text(
-            key,
-            style = MaterialTheme.typography.labelSmall.copy(
-                lineHeight = MaterialTheme.typography.labelSmall.fontSize,
-                lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
-            ),
-            maxLines = 1,
-            softWrap = false,
-        )
+    ) { measurables, constraints ->
+        val text = measurables.first().measure(Constraints())
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val baseline = text[FirstBaseline].takeIf { it != AlignmentLine.Unspecified } ?: text.height
+        val y = (height / 2f + capHeightPx / 2f - baseline).roundToInt()
+        layout(width, height) { text.place((width - text.width) / 2, y) }
     }
 }
+
+/** Height of a capital letter relative to the font size, for typical UI sans-serif fonts. */
+private const val CAP_HEIGHT_RATIO = 0.7f
 
 private val UP_NEXT_CORNER = 22.dp
 
