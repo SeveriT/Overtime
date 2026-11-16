@@ -1,10 +1,10 @@
 """Generates the Overtime app icon: a master PNG, the window icon PNG and a multi-size Windows ICO.
 
-Design: the Material Symbols "live_tv" glyph (Outlined) in white, filling a rounded square in the app's
-default sidebar / title bar colour. Large sizes use the 48 px optical size; small sizes use the heavier
-20 px one so the strokes stay crisp at 16-32 px.
+Design: the Material Icons "live_tv" glyph (Rounded: a TV with antennas and a play triangle) in white, on
+a rounded square in the app's default sidebar / title bar colour. It is the same icon the Android app shows
+for Live TV, so both apps share one look.
 
-Glyph sources (Apache 2.0, google/material-design-icons): tools/symbols/live_tv_{20,48}px.svg
+Glyph source (Apache 2.0, Compose material-icons-extended Icons.Rounded.LiveTv): tools/symbols/live_tv_rounded_24px.svg
 
 Run from the repo root:  python tools/make_icon.py
 """
@@ -109,8 +109,11 @@ def parse_path(d):
     return polygons
 
 
-def load_symbol(px):
-    svg = (SYMBOLS / f"live_tv_{px}px.svg").read_text()
+VIEWBOX = 24  # the glyph is drawn in a 24 x 24 box
+
+
+def load_symbol():
+    svg = (SYMBOLS / "live_tv_rounded_24px.svg").read_text()
     return parse_path(re.search(r'\sd="([^"]+)"', svg).group(1))
 
 
@@ -120,7 +123,7 @@ def _mask(polygons, size, scale, offset):
     mask = Image.new("1", (size, size), 0)
     for poly in polygons:
         layer = Image.new("1", (size, size), 0)
-        pts = [(offset + px * scale, offset + (py + 960) * scale) for px, py in poly]  # viewBox is 0 -960 960 960
+        pts = [(offset + px * scale, offset + py * scale) for px, py in poly]
         ImageDraw.Draw(layer).polygon(pts, fill=1)
         mask = ImageChops.logical_xor(mask, layer)
     return mask.convert("L")
@@ -138,13 +141,13 @@ def render(size):
     radius = round(s * 0.22)
     ImageDraw.Draw(img).rounded_rectangle([margin, margin, s - margin - 1, s - margin - 1], radius, fill=BACKGROUND)
 
-    # Glyph box as a share of the icon. The symbol's own padding leaves the TV at ~83 % of the box, so
-    # 0.84 puts it at ~70 % of the icon width with breathing room; small sizes run a bit larger to stay legible.
-    glyph_box = s * (0.92 if small else 0.84)
-    scale = glyph_box / 960
+    # Glyph box as a share of the icon. The TV fills 22/24 of its box, so 0.72 puts it at ~66 % of the
+    # icon width with breathing room; small sizes run a bit larger to stay legible.
+    glyph_box = s * (0.80 if small else 0.72)
+    scale = glyph_box / VIEWBOX
     offset = (s - glyph_box) / 2
 
-    polygons = load_symbol(20 if small else 48)
+    polygons = load_symbol()
     img.paste(Image.new("RGBA", (s, s), GLYPH + (255,)), (0, 0), _mask(polygons, s, scale, offset))
     return img.resize((size, size), Image.LANCZOS)
 
