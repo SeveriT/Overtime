@@ -394,6 +394,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     var groupSort by remember { mutableStateOf(settings.groupSort) }
     var rewindEnabled by remember { mutableStateOf(settings.rewindEnabled) }
     var refreshOnLaunch by remember { mutableStateOf(settings.refreshOnLaunch) }
+    var autoplayNext by remember { mutableStateOf(settings.autoplayNext) }
     var subtitles by remember { mutableStateOf(settings.subtitles) }
 
     // Colours preview live; closing without saving puts the originals back.
@@ -426,6 +427,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                             groupSort = groupSort,
                             rewindEnabled = rewindEnabled,
                             refreshOnLaunch = refreshOnLaunch,
+                            autoplayNext = autoplayNext,
                             subtitles = subtitles,
                             posterWidth = posterWidth,
                             posterCorners = posterCorners,
@@ -501,6 +503,12 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                 checked = rewindEnabled,
                 onCheckedChange = { rewindEnabled = it },
             )
+            SwitchRow(
+                title = "Autoplay next episode",
+                supporting = "When an episode ends, the next one starts after a 10-second countdown you can skip or cancel.",
+                checked = autoplayNext,
+                onCheckedChange = { autoplayNext = it },
+            )
             OutlinedTextField(userAgent, { userAgent = it }, label = { Text("HTTP user agent") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(
                 caching, { caching = it.filter(Char::isDigit) },
@@ -513,7 +521,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
             SectionHeader("Info")
             Text(
                 "Shortcuts: ← → or Page Up/Down change channel · Shift+← → rewind / forward 10 s · End back to live · " +
-                    "↑ ↓ volume · Space pause · M mute · S sidebar · I stream info · B audio track · V subtitles · G guide (← → move through time, Home now) · L movies & series (← → skip 10 s while a movie plays) · F or F11 fullscreen · Esc back / leave fullscreen",
+                    "↑ ↓ volume · Space pause · M mute · S sidebar · I stream info · B audio track · V subtitles · N next episode · G guide (← → move through time, Home now) · L movies & series (← → skip 10 s while a movie plays) · F or F11 fullscreen · Esc back / leave fullscreen",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

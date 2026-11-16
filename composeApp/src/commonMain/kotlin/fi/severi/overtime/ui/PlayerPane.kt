@@ -60,6 +60,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import fi.severi.overtime.model.WatchProgress
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -123,6 +130,8 @@ fun PlayerPane(
     val vod by vm.currentVod.collectAsState()
     val settings by vm.settings.collectAsState()
     val volume by vm.volume.collectAsState()
+    val upNextEntry by vm.upNext.collectAsState()
+    val countdown by vm.autoplayCountdown.collectAsState()
     val clock by vm.clock.collectAsState()
     val hasContent = channel != null || vod != null
 
@@ -184,6 +193,14 @@ fun PlayerPane(
 
         when {
             !hasContent -> CenterMessage("Pick a channel from the list")
+            state.ended && upNextEntry != null && countdown != null -> UpNextCard(
+                next = upNextEntry!!,
+                seconds = countdown!!,
+                onPlay = vm::playNextEpisode,
+                onCancel = vm::cancelAutoplay,
+                modifier = Modifier.align(Alignment.Center),
+            )
+            state.ended && upNextEntry != null -> CenterMessage("Finished · press play to watch again, or N for the next episode")
             state.ended -> CenterMessage("Finished · press play to watch again")
             state.error != null -> CenterMessage(state.error!!, isError = true)
             state.buffering != null && !state.playing -> ContainedLoadingIndicator(
@@ -469,6 +486,10 @@ private fun ToolbarButtons(
                     enabled = timeshift?.isLive != true,
                 ) { vm.seekBy(REWIND_STEP_MS) }
             }
+            val next by vm.upNext.collectAsState()
+            next?.let { episode ->
+                ToolbarButton(Icons.Default.SkipNext, "Next episode: S${episode.season} E${episode.episode} (N)") { vm.playNextEpisode() }
+            }
             if (!onDemand) ToolbarButton(Icons.Default.SkipNext, "Next channel (→)") { vm.step(1) }
             ToolbarButton(Icons.Default.Stop, if (onDemand) "Stop and open Movies & series" else "Stop") {
                 if (onDemand) vm.stopToLibrary() else vm.stopPlayback()
@@ -520,6 +541,45 @@ private fun ToolbarButtons(
 
 /** Below this player width the toolbar buttons wrap onto two rows. */
 private val COMPACT_TOOLBAR_WIDTH = 904.dp
+
+/** After an episode ends: the next one with a countdown, Play now and Cancel. */
+@Composable
+private fun UpNextCard(next: WatchProgress, seconds: Int, onPlay: () -> Unit, onCancel: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
+        shadowElevation = 8.dp,
+        modifier = modifier.padding(24.dp).widthIn(max = 460.dp),
+    ) {
+        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            next.backdrop?.let {
+                Artwork(it, contentDescription = null, modifier = Modifier.width(160.dp).aspectRatio(16f / 9f).clip(MaterialTheme.shapes.medium))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Up next", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    "S${next.season} E${next.episode}" + next.episodeTitle?.let { " · $it" }.orEmpty(),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "Starting in $seconds s",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onPlay, shapes = ButtonDefaults.shapes()) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                        Text("Play now")
+                    }
+                    TextButton(onClick = onCancel, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
+                }
+            }
+        }
+    }
+}
 
 /** Toolbar menus report opening and closing so the controls stay up meanwhile. */
 private val LocalMenuOpenChange = staticCompositionLocalOf<(Boolean) -> Unit> { {} }

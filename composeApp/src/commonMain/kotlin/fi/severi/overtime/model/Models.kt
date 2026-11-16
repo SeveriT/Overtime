@@ -113,6 +113,8 @@ data class AppSettings(
     val rewindMinutes: Int = 5,
     /** Reload every source's channels and guide in the background when the app opens. */
     val refreshOnLaunch: Boolean = true,
+    /** Start the next episode a few seconds after one ends. */
+    val autoplayNext: Boolean = true,
     // Library poster cards
     val posterWidth: PosterWidth = PosterWidth.LARGE,
     val posterCorners: PosterCorners = PosterCorners.CLASSIC,

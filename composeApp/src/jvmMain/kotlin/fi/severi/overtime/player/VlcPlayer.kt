@@ -487,9 +487,12 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
         if (_state.value.playing || _state.value.paused) player.controls().pause()
     }
 
+    /** Kept here rather than in [state] so volume steps don't redraw everything that watches the player. */
+    @Volatile private var volume = 100
+
     override fun setVolume(volume: Int) {
-        player.audio().setVolume(volume.coerceIn(0, 100))
-        _state.update { it.copy(volume = volume) }
+        this.volume = volume.coerceIn(0, 100)
+        player.audio().setVolume(this.volume)
     }
 
     override fun toggleMute() {
@@ -535,7 +538,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
             player = newPlayer(factory)
             oldPlayer.release()
             oldFactory.release()
-            player.audio().setVolume(s.volume)
+            player.audio().setVolume(volume)
             if (s.muted) player.audio().setMute(true)
 
             if (request == null || s.error != null || s.ended) return

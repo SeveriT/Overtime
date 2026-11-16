@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -66,6 +67,12 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     /** Live volume: the slider and player follow it at once; settings catch up when it settles. */
     val volume = MutableStateFlow(_settings.value.volume)
     private var volumeSaveJob: Job? = null
+
+    init {
+        // VLC's volume call can wait on its audio thread, so it runs off the UI thread; a StateFlow
+        // always hands over the newest value, skipping steps that came in meanwhile.
+        scope.launch { volume.collect { player.setVolume(it) } }
+    }
 
     private val _sources = MutableStateFlow(repo.loadSources())
     val sources: StateFlow<List<Source>> = _sources.asStateFlow()
@@ -394,7 +401,10 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
             val season = details.seasons.firstOrNull { it.number == entry.season } ?: return@launch
             val current = season.episodes.firstOrNull { it.id == entry.episodeId } ?: return@launch
             val next = nextEpisodeAfter(details, season, current) ?: return@launch
-            if (playingEntry?.key == entry.key) nextEpisode = episodeEntry(source.id, series.copy(backdrop = entry.backdrop), details, next.first, next.second)
+            if (playingEntry?.key == entry.key) {
+                nextEpisode = episodeEntry(source.id, series.copy(backdrop = entry.backdrop), details, next.first, next.second)
+                upNext.value = nextEpisode
+            }
         }
     }
 
@@ -447,6 +457,58 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     /** For series: the episode after the one playing, queued as Next up when it finishes. */
     @kotlin.concurrent.Volatile private var nextEpisode: WatchProgress? = null
 
+    /** The episode after the one playing, for the Next episode button and autoplay; null for movies and finales. */
+    val upNext = MutableStateFlow<WatchProgress?>(null)
+
+    /** Seconds until the next episode starts on its own, while counting down after an episode ended. */
+    val autoplayCountdown = MutableStateFlow<Int?>(null)
+    private var autoplayJob: Job? = null
+
+    /** Plays the episode after the current one, from where it was left off if it was started before. */
+    fun playNextEpisode() {
+        val next = upNext.value ?: return
+        val context = vodContext.value
+        val details = context?.series
+        val season = details?.seasons?.firstOrNull { it.number == next.season }
+        val episode = season?.episodes?.firstOrNull { it.id == next.episodeId }
+        // With the episode list already loaded, play it directly; otherwise as a Continue watching entry.
+        if (context != null && details != null && season != null && episode != null && library.source()?.id == context.sourceId) {
+            playEpisode(context.item, details, season, episode)
+        } else {
+            resume(next)
+        }
+    }
+
+    fun cancelAutoplay() {
+        autoplayJob?.cancel()
+        autoplayJob = null
+        autoplayCountdown.value = null
+    }
+
+    private fun startAutoplayCountdown() {
+        autoplayJob?.cancel()
+        autoplayJob = scope.launch {
+            for (seconds in AUTOPLAY_SECONDS downTo 1) {
+                autoplayCountdown.value = seconds
+                delay(1_000)
+            }
+            autoplayCountdown.value = null
+            playNextEpisode()
+        }
+    }
+
+    init {
+        // An episode that plays to the end counts down to the next one; playing it again cancels that.
+        scope.launch {
+            player.state.map { it.ended }.distinctUntilChanged().collect { ended ->
+                when {
+                    !ended -> cancelAutoplay()
+                    upNext.value != null && _settings.value.autoplayNext -> startAutoplayCountdown()
+                }
+            }
+        }
+    }
+
     /** Ignore player progress until the new file has started (the old one's state may still be around). */
     @kotlin.concurrent.Volatile private var awaitingStart = false
     private var lastSavedAt = 0L
@@ -468,6 +530,8 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         awaitingStart = true
         playingEntry = entry
         nextEpisode = next
+        cancelAutoplay()
+        upNext.value = next
         library.close()
     }
 
@@ -511,6 +575,8 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         if (!awaitingStart) playingEntry?.let(::commit)
         playingEntry = null
         nextEpisode = null
+        upNext.value = null
+        cancelAutoplay()
     }
 
     fun play(channel: Channel) {
@@ -594,7 +660,6 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         val clamped = volume.coerceIn(0, 100)
         if (clamped == this.volume.value) return
         this.volume.value = clamped
-        player.setVolume(clamped)
         volumeSaveJob?.cancel()
         volumeSaveJob = scope.launch {
             delay(VOLUME_SETTLE_MS)
@@ -727,6 +792,9 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     private companion object {
         /** How often the playing title's position is written to disk. */
         const val PROGRESS_SAVE_MS = 10_000L
+
+        /** Countdown before the next episode starts on its own. */
+        const val AUTOPLAY_SECONDS = 10
 
         /** Settings changes are collected this long before writing. */
         const val SETTINGS_SAVE_DELAY_MS = 300L
