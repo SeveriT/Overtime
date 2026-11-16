@@ -25,6 +25,8 @@ import fi.severi.overtime.model.Source
 import fi.severi.overtime.player.VideoPlayer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel as Signal
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -44,6 +46,26 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     private val _settings = MutableStateFlow(repo.loadSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
+
+    // Settings are written in the background, at most one write at a time; quick runs of changes
+    // (dragging a slider) collapse into one write. shutdown() writes whatever is still pending.
+    private val settingsDirty = Signal<Unit>(Signal.CONFLATED)
+    private val settingsWriteLock = Any()
+
+    private fun writeSettings() = synchronized(settingsWriteLock) { repo.saveSettings(_settings.value) }
+
+    init {
+        scope.launch {
+            for (ignored in settingsDirty) {
+                delay(SETTINGS_SAVE_DELAY_MS)
+                writeSettings()
+            }
+        }
+    }
+
+    /** Live volume: the slider and player follow it at once; settings catch up when it settles. */
+    val volume = MutableStateFlow(_settings.value.volume)
+    private var volumeSaveJob: Job? = null
 
     private val _sources = MutableStateFlow(repo.loadSources())
     val sources: StateFlow<List<Source>> = _sources.asStateFlow()
@@ -570,11 +592,17 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     fun setVolume(volume: Int) {
         val clamped = volume.coerceIn(0, 100)
+        if (clamped == this.volume.value) return
+        this.volume.value = clamped
         player.setVolume(clamped)
-        updateSettings { it.copy(volume = clamped) }
+        volumeSaveJob?.cancel()
+        volumeSaveJob = scope.launch {
+            delay(VOLUME_SETTLE_MS)
+            updateSettings { it.copy(volume = clamped) }
+        }
     }
 
-    fun adjustVolume(delta: Int) = setVolume(_settings.value.volume + delta)
+    fun adjustVolume(delta: Int) = setVolume(volume.value + delta)
 
     fun toggleFavoriteGroup(group: String) {
         val sourceId = selectedSourceId.value ?: return
@@ -668,7 +696,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         val after = transform(before)
         if (after == before) return
         _settings.value = after
-        repo.saveSettings(after)
+        settingsDirty.trySend(Unit)
         if (after.subtitles != before.subtitles) scope.launch { player.setSubtitleStyle(after.subtitles) }
         if (after.userAgent != before.userAgent) repo.setUserAgent(after.userAgent)
         // Recording starts with playback, so turning rewind on or off restarts the current channel.
@@ -683,6 +711,9 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         saveProgressNow()
         player.release()
         scope.cancel()
+        // Anything still waiting to be written, including a volume change that hadn't settled.
+        _settings.value = _settings.value.copy(volume = volume.value)
+        writeSettings()
     }
 
     // Keep this the LAST initialiser in the class: play() uses state declared all through the class,
@@ -696,5 +727,11 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     private companion object {
         /** How often the playing title's position is written to disk. */
         const val PROGRESS_SAVE_MS = 10_000L
+
+        /** Settings changes are collected this long before writing. */
+        const val SETTINGS_SAVE_DELAY_MS = 300L
+
+        /** The volume is stored in settings once the slider has been still this long. */
+        const val VOLUME_SETTLE_MS = 400L
     }
 }

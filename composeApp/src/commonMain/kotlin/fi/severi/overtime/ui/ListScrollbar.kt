@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 /** Lists longer than this get a visible scrollbar. */
-internal const val SCROLLBAR_MIN_ITEMS = 30
+internal const val SCROLLBAR_MIN_ITEMS = 20
 
 /** A thin scrollbar for [state], shown only once the list has more than [SCROLLBAR_MIN_ITEMS] items. */
 @Composable

@@ -122,6 +122,7 @@ fun PlayerPane(
     val channel by vm.currentChannel.collectAsState()
     val vod by vm.currentVod.collectAsState()
     val settings by vm.settings.collectAsState()
+    val volume by vm.volume.collectAsState()
     val clock by vm.clock.collectAsState()
     val hasContent = channel != null || vod != null
 
@@ -139,7 +140,7 @@ fun PlayerPane(
     // Volume changes from the keyboard show a short popup; the toolbar slider covers it when visible.
     var volumeFlyoutVisible by remember { mutableStateOf(false) }
     var volumeInitialised by remember { mutableStateOf(false) }
-    LaunchedEffect(settings.volume, state.muted) {
+    LaunchedEffect(volume, state.muted) {
         if (!volumeInitialised) {
             volumeInitialised = true
             return@LaunchedEffect
@@ -196,7 +197,7 @@ fun PlayerPane(
             exit = fadeOut() + scaleOut(targetScale = 0.9f),
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
         ) {
-            VolumeFlyout(vm, volume = settings.volume, muted = state.muted)
+            VolumeFlyout(vm, volume = volume, muted = state.muted)
         }
 
         // While watching delayed with the controls hidden, keep the delay visible.
@@ -315,7 +316,7 @@ fun PlayerPane(
                     vm = vm,
                     paused = state.paused,
                     muted = state.muted,
-                    volume = settings.volume,
+                    volume = volume,
                     fullscreen = fullscreen,
                     sidebarVisible = sidebarVisible,
                     timeshift = state.timeshift,
