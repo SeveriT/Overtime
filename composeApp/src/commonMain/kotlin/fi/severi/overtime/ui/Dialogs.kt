@@ -396,6 +396,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     var rewindEnabled by remember { mutableStateOf(settings.rewindEnabled) }
     var refreshOnLaunch by remember { mutableStateOf(settings.refreshOnLaunch) }
     var autoplayNext by remember { mutableStateOf(settings.autoplayNext) }
+    var shortcutKeys by remember { mutableStateOf(settings.shortcuts) }
     var upNextLead by remember { mutableStateOf(settings.upNextLead) }
     var subtitles by remember { mutableStateOf(settings.subtitles) }
 
@@ -430,6 +431,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                             rewindEnabled = rewindEnabled,
                             refreshOnLaunch = refreshOnLaunch,
                             autoplayNext = autoplayNext,
+                            shortcuts = shortcutKeys,
                             upNextLead = upNextLead,
                             subtitles = subtitles,
                             posterWidth = posterWidth,
@@ -525,12 +527,6 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
 
             SectionHeader("Info")
             Text(
-                "Shortcuts: ← → or Page Up/Down change channel · Shift+← → rewind / forward 10 s · End back to live · " +
-                    "↑ ↓ volume · Space pause · M mute · S sidebar · I stream info · B audio track · V subtitles · N next episode · G guide (← → move through time, Home now) · L movies & series (← → skip 10 s while a movie plays) · F or F11 fullscreen · Esc back / leave fullscreen",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
                 "Data folder: ${vm.dataDirectory}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -591,16 +587,20 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
             }
         }
         BoxWithConstraints {
-            if (maxWidth >= TWO_COLUMN_MIN) {
-                Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = general)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = looks)
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val wide = maxWidth >= TWO_COLUMN_MIN
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (wide) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = general)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = looks)
+                    }
+                } else {
                     general()
                     looks()
                 }
+                // Full width under both columns: a long list, laid out in two columns of its own when there's room.
+                SectionHeader("Keyboard shortcuts")
+                ShortcutEditor(shortcutKeys, onChange = { shortcutKeys = it }, twoColumns = wide)
             }
         }
     }

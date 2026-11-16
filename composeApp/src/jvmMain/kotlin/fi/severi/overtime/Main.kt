@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
@@ -141,56 +140,56 @@ fun main() = application {
             if (event.type != KeyEventType.KeyDown || vm == null) return@Window false
             // Settings or Sources open, or typing in a search field: the keys belong to that.
             if (ShortcutGuard.active) return@Window false
+            val combo = event.toCombo() ?: return@Window false
+            val keys = vm.shortcuts.value
+            fun pressed(action: Shortcut) = combo in keys.getValue(action)
             // The library is a browsing page: only closing keys and playback basics apply.
             if (vm.library.visible.value) {
-                return@Window when (event.key) {
-                    Key.Escape, Key.L -> { vm.library.close(); true }
-                    Key.Spacebar -> { vm.player.togglePause(); true }
-                    Key.F11 -> { vm.toggleFullscreen(); true }
+                return@Window when {
+                    pressed(Shortcut.BACK) || pressed(Shortcut.LIBRARY) -> { vm.library.close(); true }
+                    pressed(Shortcut.PLAY_PAUSE) -> { vm.player.togglePause(); true }
+                    pressed(Shortcut.FULLSCREEN) -> { vm.toggleFullscreen(); true }
                     else -> false
                 }
             }
-            // In the guide, left/right move through time (30 min, or 3 h with Shift) instead of changing channel.
+            // In the guide its own keys (moving through time) come first; the rest work as usual.
             if (vm.guideVisible.value) {
-                val step = if (event.isShiftPressed) 3 * GUIDE_STEP_MS else GUIDE_STEP_MS
-                when (event.key) {
-                    Key.DirectionLeft -> { vm.shiftGuide(-step); return@Window true }
-                    Key.DirectionRight -> { vm.shiftGuide(step); return@Window true }
-                    Key.MoveHome -> { vm.guideToNow(); return@Window true }
-                    else -> Unit
+                when {
+                    pressed(Shortcut.GUIDE_EARLIER) -> { vm.shiftGuide(-GUIDE_STEP_MS); return@Window true }
+                    pressed(Shortcut.GUIDE_LATER) -> { vm.shiftGuide(GUIDE_STEP_MS); return@Window true }
+                    pressed(Shortcut.GUIDE_EARLIER_MORE) -> { vm.shiftGuide(-3 * GUIDE_STEP_MS); return@Window true }
+                    pressed(Shortcut.GUIDE_LATER_MORE) -> { vm.shiftGuide(3 * GUIDE_STEP_MS); return@Window true }
+                    pressed(Shortcut.GUIDE_NOW) -> { vm.guideToNow(); return@Window true }
                 }
             }
-            when (event.key) {
-                Key.F, Key.F11 -> { vm.toggleFullscreen(); true }
-                Key.G -> { vm.toggleGuide(); true }
-                Key.L -> { if (vm.hasLibrary.value) vm.openLibrary(); true }
-                Key.Escape -> when {
+            val onDemand = vm.currentVod.value != null
+            when {
+                pressed(Shortcut.FULLSCREEN) -> { vm.toggleFullscreen(); true }
+                pressed(Shortcut.GUIDE) -> { vm.toggleGuide(); true }
+                pressed(Shortcut.LIBRARY) -> { if (vm.hasLibrary.value) vm.openLibrary(); true }
+                pressed(Shortcut.BACK) -> when {
                     vm.guideVisible.value -> { vm.closeGuide(); true }
                     fullscreen -> { vm.setFullscreen(false); true }
                     !vm.showGroupList.value -> { vm.backToGroups(); true }
                     else -> false
                 }
-                Key.Spacebar -> { vm.player.togglePause(); true }
-                Key.M -> { vm.player.toggleMute(); true }
-                Key.S -> { vm.toggleSidebar(); true }
-                Key.I -> { vm.toggleStats(); true }
-                Key.B -> { vm.cycleAudioTrack(); true }
-                Key.V -> { vm.cycleSubtitles(); true }
-                Key.N -> { vm.playNextEpisode(); true }
-                // Movies seek with plain arrows; live TV changes channel unless Shift is held.
-                Key.DirectionLeft -> {
-                    if (event.isShiftPressed || vm.currentVod.value != null) vm.seekBy(-REWIND_STEP_MS) else vm.step(-1)
-                    true
-                }
-                Key.DirectionRight -> {
-                    if (event.isShiftPressed || vm.currentVod.value != null) vm.seekBy(REWIND_STEP_MS) else vm.step(1)
-                    true
-                }
-                Key.PageUp -> { vm.step(-1); true }
-                Key.PageDown -> { vm.step(1); true }
-                Key.MoveEnd -> { vm.goLive(); true }
-                Key.DirectionUp -> { vm.adjustVolume(+5); true }
-                Key.DirectionDown -> { vm.adjustVolume(-5); true }
+                pressed(Shortcut.PLAY_PAUSE) -> { vm.player.togglePause(); true }
+                pressed(Shortcut.MUTE) -> { vm.player.toggleMute(); true }
+                pressed(Shortcut.SIDEBAR) -> { vm.toggleSidebar(); true }
+                pressed(Shortcut.STREAM_INFO) -> { vm.toggleStats(); true }
+                pressed(Shortcut.AUDIO_TRACK) -> { vm.cycleAudioTrack(); true }
+                pressed(Shortcut.SUBTITLES) -> { vm.cycleSubtitles(); true }
+                pressed(Shortcut.NEXT_EPISODE) -> { vm.playNextEpisode(); true }
+                // Movies seek with these; live TV changes channel.
+                pressed(Shortcut.PREVIOUS) -> { if (onDemand) vm.seekBy(-REWIND_STEP_MS) else vm.step(-1); true }
+                pressed(Shortcut.NEXT) -> { if (onDemand) vm.seekBy(REWIND_STEP_MS) else vm.step(1); true }
+                pressed(Shortcut.REWIND) -> { vm.seekBy(-REWIND_STEP_MS); true }
+                pressed(Shortcut.FORWARD) -> { vm.seekBy(REWIND_STEP_MS); true }
+                pressed(Shortcut.CHANNEL_UP) -> { vm.step(-1); true }
+                pressed(Shortcut.CHANNEL_DOWN) -> { vm.step(1); true }
+                pressed(Shortcut.GO_LIVE) -> { vm.goLive(); true }
+                pressed(Shortcut.VOLUME_UP) -> { vm.adjustVolume(+5); true }
+                pressed(Shortcut.VOLUME_DOWN) -> { vm.adjustVolume(-5); true }
                 else -> false
             }
         },

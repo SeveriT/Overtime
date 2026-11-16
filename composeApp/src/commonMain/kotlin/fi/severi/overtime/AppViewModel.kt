@@ -18,6 +18,7 @@ import fi.severi.overtime.model.VodPlayback
 import fi.severi.overtime.model.GROUP_ALL
 import fi.severi.overtime.model.GROUP_FAVORITES
 import fi.severi.overtime.model.GroupEntry
+import fi.severi.overtime.model.KeyCombo
 import fi.severi.overtime.model.favoriteGroupKey
 import fi.severi.overtime.model.GroupSort
 import fi.severi.overtime.model.Programme
@@ -63,6 +64,11 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
             }
         }
     }
+
+    /** Keys per action: the defaults with the user's changes applied. */
+    val shortcuts: StateFlow<Map<Shortcut, List<KeyCombo>>> = _settings
+        .map { Shortcuts.resolve(it.shortcuts) }
+        .stateIn(scope, SharingStarted.Eagerly, Shortcuts.resolve(_settings.value.shortcuts))
 
     /** Live volume: the slider and player follow it at once; settings catch up when it settles. */
     val volume = MutableStateFlow(_settings.value.volume)

@@ -29,7 +29,7 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 - Subtitle style: font, size, edge, colour and bold
 - Picture settings: brightness, contrast and saturation
 - Stream info: resolution, frame rate, codec, bitrate and more, with copy stream URL
-- Fullscreen and keyboard shortcuts
+- Fullscreen and customisable keyboard shortcuts
 
 ### Look
 - Material 3 Expressive design
@@ -63,6 +63,8 @@ Run it again after pulling changes to update; it closes a running copy first.
 
 ## Keyboard shortcuts
 
+Defaults; every shortcut can be changed in Settings → Keyboard shortcuts.
+
 | Key | Action |
 | --- | --- |
 | Space | Pause / resume |
@@ -74,6 +76,7 @@ Run it again after pulling changes to update; it closes a running copy first.
 | M | Mute |
 | B | Next audio track |
 | V | Next subtitle track (or off) |
+| N | Next episode |
 | I | Stream info |
 | S | Show / hide the sidebar |
 | G | Programme guide (← → move through time, Home jumps to now) |

@@ -132,6 +132,8 @@ data class AppSettings(
     val favoriteGroups: Set<String> = emptySet(),
     val volume: Int = 100,
     val subtitles: SubtitleStyle = SubtitleStyle(),
+    /** Keyboard shortcuts the user changed, by Shortcut name; anything missing uses the default keys. */
+    val shortcuts: Map<String, List<KeyCombo>> = emptyMap(),
     val picture: PictureAdjust = PictureAdjust(),
     /** Window bounds (dp) when it was last closed, restored at launch; null until first closed. */
     val window: WindowBounds? = null,
@@ -191,6 +193,10 @@ enum class UpNextLead(val label: String, val seconds: Int) {
     S60("60 s", 60),
     S90("90 s", 90),
 }
+
+/** A key plus modifiers. [key] is Compose's Key.keyCode. */
+@Serializable
+data class KeyCombo(val key: Long, val shift: Boolean = false, val ctrl: Boolean = false, val alt: Boolean = false)
 
 @Serializable
 data class WindowBounds(val x: Int, val y: Int, val width: Int, val height: Int, val maximized: Boolean = false)
