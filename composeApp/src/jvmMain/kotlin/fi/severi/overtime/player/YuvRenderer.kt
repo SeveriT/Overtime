@@ -9,7 +9,10 @@ import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
+import org.jetbrains.skia.FilterMipmap
+import org.jetbrains.skia.FilterMode
 import org.jetbrains.skia.FilterTileMode
+import org.jetbrains.skia.MipmapMode
 import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.Rect
@@ -100,9 +103,15 @@ internal class YuvRenderer {
             inUse = front
             front
         }
+        // Subtitles are drawn into the frame by VLC, so scaling quality decides how sharp they are in a
+        // window. Luma carries the detail: a cubic filter keeps strokes crisp when shrinking moderately
+        // (and when enlarging), mipmaps stop thin lines breaking up below half size. Chroma is soft anyway.
+        val shrink = min(scaleX, scaleY)
+        val lumaSampling: SamplingMode =
+            if (shrink < MIPMAP_BELOW) FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR) else SamplingMode.CATMULL_ROM
         // makeShader snapshots the pixels, so the slot is free again right after this.
-        val shaders = slots[index].planes.map {
-            it.bitmap.makeShader(FilterTileMode.CLAMP, FilterTileMode.CLAMP, SamplingMode.LINEAR)
+        val shaders = slots[index].planes.mapIndexed { plane, it ->
+            it.bitmap.makeShader(FilterTileMode.CLAMP, FilterTileMode.CLAMP, if (plane == 0) lumaSampling else SamplingMode.LINEAR)
         }
         synchronized(lock) { inUse = -1 }
 
@@ -143,6 +152,9 @@ internal class YuvRenderer {
 
     companion object {
         private const val SLOTS = 3
+
+        /** Below this scale the luma plane is sampled from mipmaps instead of with a cubic filter. */
+        private const val MIPMAP_BELOW = 0.5f
 
         private const val SKSL = """
             uniform shader yTex;

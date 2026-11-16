@@ -635,7 +635,8 @@ actual fun VideoSurface(player: VideoPlayer, modifier: Modifier) {
             image = image,
             dstOffset = IntOffset(r.left.roundToInt(), r.top.roundToInt()),
             dstSize = IntSize(r.width.roundToInt(), r.height.roundToInt()),
-            filterQuality = FilterQuality.Medium,
+            // High = cubic/mipmapped scaling, so subtitles drawn into the frame stay sharp in a window.
+            filterQuality = FilterQuality.High,
             colorFilter = colorFilter,
         )
     }

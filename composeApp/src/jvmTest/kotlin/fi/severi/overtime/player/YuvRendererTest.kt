@@ -56,6 +56,27 @@ class YuvRendererTest {
     }
 
     @Test
+    fun scaledDrawsKeepTheirColours() {
+        // Shrunk by 30 % (cubic luma) and to 30 % (mipmapped luma): a white frame stays white.
+        val renderer = YuvRenderer()
+        renderer.configure(64, 720)
+        val chroma = 32 * 360
+        renderer.write(arrayOf(plane(64 * 720, 235), plane(chroma, 128), plane(chroma, 128)))
+        listOf(0.7f, 0.3f).forEach { scale ->
+            val w = (64 * scale).toInt()
+            val h = (720 * scale).toInt()
+            val surface = Surface.makeRasterN32Premul(w, h)
+            renderer.draw(surface.canvas, 0f, 0f, scale)
+            val bitmap = Bitmap()
+            bitmap.allocN32Pixels(w, h)
+            surface.makeImageSnapshot().readPixels(bitmap, 0, 0)
+            val argb = bitmap.getColor(w / 2, h / 2)
+            assertColor(Triple(255, 255, 255), Triple(Color.getR(argb), Color.getG(argb), Color.getB(argb)), "white at $scale")
+        }
+        renderer.release()
+    }
+
+    @Test
     fun shaderCompiles() {
         assertNotNull(YuvRenderer.effect, "YUV shader failed to compile; the player would fall back to RGB")
     }
