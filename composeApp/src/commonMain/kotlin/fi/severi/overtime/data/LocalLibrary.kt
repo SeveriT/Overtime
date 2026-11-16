@@ -32,10 +32,44 @@ data class LocalIndex(val movies: List<LibraryItem>, val shows: List<Pair<Librar
 
     fun show(id: String): SeriesDetails? = shows.firstOrNull { it.first.id == id }?.second
 
+    /** [art] applied to the title [id] (posters only where the files didn't bring their own). */
+    fun withArt(id: String, art: LocalArt): LocalIndex = LocalIndex(
+        movies = movies.map { if (it.id == id) it.withArt(art) else it },
+        shows = shows.map { (item, details) ->
+            if (item.id == id) item.withArt(art) to details.copy(backdrop = details.backdrop ?: art.backdrop, imdbId = art.imdbId) else item to details
+        },
+    )
+
+    /**
+     * Series found under different names that are the same show (same IMDb id, e.g. "The Office US" and
+     * "The Office Extended Cut") become one, their seasons combined.
+     */
+    fun mergeSameShows(): LocalIndex {
+        val merged = shows.groupBy { it.first.imdbId ?: it.first.id }.map { (_, group) ->
+            if (group.size == 1) return@map group.single()
+            val (first, firstDetails) = group.first()
+            val seasons = group.flatMap { it.second.seasons }.groupBy { it.number }.toSortedMap().map { (number, parts) ->
+                Season(number, "Season $number", parts.flatMap { it.episodes }.sortedBy { it.number })
+            }
+            first to firstDetails.copy(seasons = seasons)
+        }
+        return LocalIndex(movies, merged.sortedBy { it.first.name.lowercase() })
+    }
+
+    private fun LibraryItem.withArt(art: LocalArt) = copy(
+        poster = poster ?: art.poster,
+        backdrop = backdrop ?: art.backdrop,
+        imdbId = imdbId ?: art.imdbId,
+    )
+
     companion object {
         val EMPTY = LocalIndex(emptyList(), emptyList())
     }
 }
+
+/** Artwork and IMDb id found online for a local title. */
+@kotlinx.serialization.Serializable
+data class LocalArt(val imdbId: String? = null, val poster: String? = null, val backdrop: String? = null)
 
 /** Video file types scanned for. */
 val VIDEO_EXTENSIONS = setOf("mkv", "mp4", "m4v", "avi", "mov", "wmv", "ts", "m2ts", "mts", "webm", "mpg", "mpeg", "flv", "ogv", "3gp", "divx")
@@ -57,7 +91,7 @@ object LocalLibraryParser {
             """internal|multi|nordic|subs?)\b.*""",
     )
 
-    data class EpisodeName(val show: String, val season: Int, val episode: Int, val title: String?)
+    data class EpisodeName(val show: String, val season: Int, val episode: Int, val title: String?, val year: String? = null)
 
     fun parse(files: List<LocalFile>): LocalIndex {
         val movies = ArrayList<LibraryItem>()
@@ -78,7 +112,8 @@ object LocalLibraryParser {
         val showItems = shows.map { (key, value) ->
             val (name, art, episodes) = value
             val item = LibraryItem(
-                id = "show:$key", kind = LibraryKind.SERIES, name = name, poster = art, rating = null, year = null,
+                id = "show:$key", kind = LibraryKind.SERIES, name = name, poster = art, rating = null,
+                year = episodes.firstNotNullOfOrNull { it.first.year },
                 categoryId = LOCAL_SOURCE, extension = null, backdrop = art,
             )
             val seasons = episodes.groupBy { it.first.season }.toSortedMap().map { (number, list) ->
@@ -105,9 +140,11 @@ object LocalLibraryParser {
             val season = match.groupValues[1].toInt()
             val number = match.groupValues[2].toInt()
             // The match may start on the separator before "S01E02"; everything before it is the show name.
-            val before = clean(stem.substring(0, match.range.first))
+            val (before, showYear) = splitYear(stem.substring(0, match.range.first))
             val after = clean(stripJunk(stem.substring(match.range.last + 1))).ifEmpty { null }
-            return EpisodeName(before.ifEmpty { showFromFolders(file.folders) ?: "Unknown series" }, season, number, after)
+            if (before.isNotEmpty()) return EpisodeName(before, season, number, after, showYear)
+            val (folderName, folderYear) = showFromFolders(file.folders)?.let(::splitYear) ?: ("Unknown series" to null)
+            return EpisodeName(folderName, season, number, after, folderYear)
         }
         // "Show/Season 2/05 - Title.mkv"
         val folder = file.folders.lastOrNull()?.trim() ?: return null
@@ -116,8 +153,8 @@ object LocalLibraryParser {
         val lead = leadingNumber.find(trimmed) ?: return null
         val number = lead.groupValues[1].toInt()
         val title = clean(stripJunk(trimmed.substring(lead.range.last + 1))).ifEmpty { null }
-        val show = showFromFolders(file.folders.dropLast(1)) ?: return null
-        return EpisodeName(show, season, number, title)
+        val (show, showYear) = showFromFolders(file.folders.dropLast(1))?.let(::splitYear) ?: return null
+        return EpisodeName(show, season, number, title, showYear)
     }
 
     fun movieOf(file: LocalFile): LibraryItem {
@@ -138,6 +175,18 @@ object LocalLibraryParser {
 
     private fun stripJunk(text: String) = junk.replace(text, "")
 
+    /** "True.Detective.(2014)." -> "True Detective" and "2014"; a name without a trailing year is just cleaned. */
+    fun splitYear(text: String): Pair<String, String?> {
+        val match = year.findAll(text).lastOrNull { it.range.first > 0 }
+        if (match != null) {
+            val name = clean(text.substring(0, match.range.first + 1))
+            // Only a year at the end (after the name) is a release year; "Blade Runner 2049 S01" keeps its number.
+            val rest = clean(text.substring(match.range.last + 1))
+            if (name.isNotEmpty() && rest.isEmpty()) return name to match.groupValues[1]
+        }
+        return clean(text) to null
+    }
+
     /** Dots and underscores to spaces, bracketed tags and stray separators removed. */
     fun clean(text: String): String =
         text.replace(Regex("""\[[^\]]*]"""), " ")
@@ -145,6 +194,9 @@ object LocalLibraryParser {
             .replace(Regex("""\(\s*\)"""), " ")
             .replace(Regex("""\s+"""), " ")
             .trim()
+            .trim('-', ' ', ')')
+            // A bracket left open by cutting the name short, e.g. "Show (" before a removed year.
+            .removeSuffix("(")
             .trim('-', ' ', '(', ')')
             .trim()
 }

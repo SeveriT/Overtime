@@ -136,6 +136,8 @@ data class AppSettings(
     val subtitleLanguage: SubtitleLanguage? = null,
     /** Folders of the user's own movies and series (Movies & series > Local files). */
     val localFolders: List<String> = emptyList(),
+    /** Look up posters for local files online (their titles go to Stremio's Cinemeta). */
+    val localArtworkOnline: Boolean = true,
     /** Keyboard shortcuts the user changed, by Shortcut name; anything missing uses the default keys. */
     val shortcuts: Map<String, List<KeyCombo>> = emptyMap(),
     val picture: PictureAdjust = PictureAdjust(),

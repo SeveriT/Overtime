@@ -417,6 +417,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     var landscapePosters by remember { mutableStateOf(settings.landscapePosters) }
     var hidePosterLabels by remember { mutableStateOf(settings.hidePosterLabels) }
     var ratedPosters by remember { mutableStateOf(settings.ratedPosters) }
+    var localArtworkOnline by remember { mutableStateOf(settings.localArtworkOnline) }
     var posterTemplate by remember { mutableStateOf(settings.posterTemplate) }
     val cancel = {
         vm.updateSettings { it.copy(sidebarColor = originalSidebar, accentColor = originalAccent) }
@@ -449,6 +450,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                             landscapePosters = landscapePosters,
                             hidePosterLabels = hidePosterLabels,
                             ratedPosters = ratedPosters,
+                            localArtworkOnline = localArtworkOnline,
                             posterTemplate = posterTemplate.trim().ifEmpty { DEFAULT_POSTER_TEMPLATE },
                         )
                     }
@@ -574,6 +576,13 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                 supporting = "Show artwork only, without the title and year under each card.",
                 checked = hidePosterLabels,
                 onCheckedChange = { hidePosterLabels = it },
+            )
+            SwitchRow(
+                title = "Artwork for local files",
+                supporting = "Looks up posters for your own movies and series online by title (sent to Stremio's Cinemeta). " +
+                    "Pictures in the folders are used first.",
+                checked = localArtworkOnline,
+                onCheckedChange = { localArtworkOnline = it },
             )
             SwitchRow(
                 title = "Rated poster artwork",

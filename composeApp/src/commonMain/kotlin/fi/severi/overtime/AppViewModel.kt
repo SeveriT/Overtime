@@ -105,7 +105,11 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
     val streamUrl = MutableStateFlow<String?>(null)
 
     /** Movies & series of Xtream sources. */
-    val library = LibraryModel(repo, scope, sources, localFolders = { _settings.value.localFolders })
+    val library = LibraryModel(
+        repo, scope, sources,
+        localFolders = { _settings.value.localFolders },
+        localArtworkOnline = { _settings.value.localArtworkOnline },
+    )
 
     // Local files make the library useful even without an Xtream login.
     val hasLibrary: StateFlow<Boolean> = sources.map { true }
@@ -443,12 +447,17 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
             return
         }
         scope.launch {
-            val index = library.ensureLocalIndex()
-            val show = index.shows.firstOrNull { it.first.id == entry.itemId } ?: return@launch
-            val season = show.second.seasons.firstOrNull { it.number == entry.season } ?: return@launch
-            val episode = season.episodes.firstOrNull { it.id == entry.episodeId } ?: return@launch
+            // Found by the file path, which stays put even when series get merged under one name.
+            val (show, season, episode) = findLocalEpisode(entry.episodeId) ?: return@launch
             playEpisode(show.first, show.second, season, episode)
         }
+    }
+
+    private suspend fun findLocalEpisode(path: String): Triple<Pair<LibraryItem, SeriesDetails>, Season, Episode>? {
+        for (show in library.ensureLocalIndex().shows) for (season in show.second.seasons) {
+            season.episodes.firstOrNull { it.id == path }?.let { return Triple(show, season, it) }
+        }
+        return null
     }
 
     fun addLocalFolder(path: String) {
@@ -464,6 +473,11 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     /** A finished series card opens the series, to pick what to watch next. */
     fun openSeries(entry: WatchProgress) {
+        if (entry.sourceId == LOCAL_SOURCE) {
+            val path = entry.episodeId ?: return
+            scope.launch { findLocalEpisode(path)?.let { library.select(it.first.first) } }
+            return
+        }
         library.select(
             LibraryItem(
                 entry.itemId, LibraryKind.SERIES, entry.title, entry.poster, null, null,

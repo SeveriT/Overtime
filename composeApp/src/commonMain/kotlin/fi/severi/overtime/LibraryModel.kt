@@ -14,6 +14,7 @@ import fi.severi.overtime.data.LocalLibraryParser
 import fi.severi.overtime.data.scanLocalFolders
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -35,6 +36,7 @@ class LibraryModel(
     private val scope: CoroutineScope,
     private val sources: StateFlow<List<Source>>,
     private val localFolders: () -> List<String>,
+    private val localArtworkOnline: () -> Boolean,
 ) {
     val visible = MutableStateFlow(false)
 
@@ -45,6 +47,7 @@ class LibraryModel(
     val localIndex = MutableStateFlow<LocalIndex?>(null)
     val localScanning = MutableStateFlow(false)
     private var scanJob: Job? = null
+    private var artJob: Job? = null
     val kind = MutableStateFlow(LibraryKind.MOVIES)
     val sourceId = MutableStateFlow<String?>(null)
     val categories = MutableStateFlow<List<LibraryCategory>>(emptyList())
@@ -115,6 +118,30 @@ class LibraryModel(
             } finally {
                 localScanning.value = false
             }
+            lookUpLocalArtwork()
+        }
+    }
+
+    /**
+     * Fills in posters (and IMDb ids, for rated artwork) for local titles without their own, a few at a
+     * time, updating the cards as results come in; then merges series that turned out to be the same show.
+     */
+    private fun lookUpLocalArtwork() {
+        if (!localArtworkOnline()) return
+        artJob?.cancel()
+        artJob = scope.launch {
+            val index = localIndex.value ?: return@launch
+            val wanted = (index.shows.map { it.first } + index.movies).filter { it.imdbId == null }
+            val limit = Semaphore(ART_LOOKUPS_AT_ONCE)
+            wanted.map { item ->
+                launch {
+                    limit.withPermit {
+                        val art = repo.localArtwork(item.kind, item.name, item.year) ?: return@withPermit
+                        localIndex.update { it?.withArt(item.id, art) }
+                    }
+                }
+            }.joinAll()
+            localIndex.update { it?.mergeSameShows() }
         }
     }
 
@@ -315,5 +342,6 @@ class LibraryModel(
     private companion object {
         const val MAX_RESULTS = 500
         const val MAX_PARALLEL_ROWS = 3
+        const val ART_LOOKUPS_AT_ONCE = 4
     }
 }

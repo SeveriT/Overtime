@@ -19,7 +19,13 @@ import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import io.ktor.http.encodeURLPathPart
 
 /** Loads, caches and persists sources, channel lists and EPG data. */
 class Repository(private val store: FileStore) {
@@ -35,6 +41,53 @@ class Repository(private val store: FileStore) {
         client.close()
         client = createHttpClient(userAgent)
         xtream = XtreamApi(client, json)
+    }
+
+    // ---- artwork for local files ----------------------------------------------
+
+    private val artCache: MutableMap<String, LocalArt?> by lazy {
+        runCatching {
+            store.readText(LOCAL_ART)?.let { json.decodeFromString<Map<String, LocalArt?>>(it) }
+        }.getOrNull()?.toMutableMap() ?: mutableMapOf()
+    }
+    private val artLock = Any()
+    private val editionWords = Regex(
+        """(?i)\b(extended( cut| edition)?|director'?s cut|theatrical( cut)?|uncut|unrated|remastered|superfan( episodes)?|special edition|complete( series)?)\b""",
+    )
+
+    /**
+     * Poster, background and IMDb id for a local title, looked up by name (and year) in Stremio's Cinemeta
+     * catalogue, which needs no account. Cached on disk, misses included, so each title is asked once.
+     */
+    suspend fun localArtwork(kind: LibraryKind, title: String, year: String?): LocalArt? = withContext(Dispatchers.Default) {
+        val key = "${kind.name}|${title.lowercase()}|${year.orEmpty()}"
+        synchronized(artLock) { if (key in artCache) return@withContext artCache[key] }
+        val type = if (kind == LibraryKind.MOVIES) "movie" else "series"
+        suspend fun search(text: String) = json.parseToJsonElement(
+            client.get("https://v3-cinemeta.strem.io/catalog/$type/top/search=${text.encodeURLPathPart()}.json").bodyAsText(),
+        ).jsonObject["metas"]?.jsonArray.orEmpty().map { it.jsonObject }
+        val found = runCatching {
+            // "The Office Extended Cut" isn't a title of its own: retry without edition words.
+            val plain = editionWords.replace(title, " ").replace(Regex("""\s+"""), " ").trim()
+            val metas = search(title).ifEmpty { if (plain != title && plain.isNotEmpty()) search(plain) else emptyList() }
+            // Same year first (releaseInfo is "2010" or "2005-2013"), otherwise the best match.
+            val pick = metas.firstOrNull { meta -> year != null && meta["releaseInfo"]?.jsonPrimitive?.contentOrNull?.startsWith(year) == true }
+                ?: metas.firstOrNull()
+            pick?.let { meta ->
+                fun field(name: String) = meta[name]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                LocalArt(
+                    imdbId = field("imdb_id") ?: field("id")?.takeIf { it.startsWith("tt") },
+                    // Cinemeta lists small images; the large size keeps posters sharp.
+                    poster = field("poster")?.replace("/poster/small/", "/poster/large/")?.replace("/poster/medium/", "/poster/large/"),
+                    backdrop = field("background"),
+                )
+            }
+        }.getOrElse { return@withContext null } // offline or a hiccup: try again next scan, don't cache
+        synchronized(artLock) {
+            artCache[key] = found
+            runCatching { store.writeText(LOCAL_ART, json.encodeToString(artCache.toMap())) }
+        }
+        found
     }
 
     // ---- settings & sources -------------------------------------------------
@@ -165,6 +218,7 @@ class Repository(private val store: FileStore) {
 
     private companion object {
         const val SETTINGS = "settings.json"
+        const val LOCAL_ART = "local_art.json"
         const val SOURCES = "sources.json"
         const val PROGRESS = "progress.json"
         const val MAX_GUIDES = 8

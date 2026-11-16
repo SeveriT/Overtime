@@ -1,5 +1,6 @@
 package fi.severi.overtime
 
+import fi.severi.overtime.data.LocalArt
 import fi.severi.overtime.data.LocalFile
 import fi.severi.overtime.data.LocalLibraryParser
 import kotlin.test.Test
@@ -21,6 +22,18 @@ class LocalLibraryParserTest {
         val alt = LocalLibraryParser.episodeOf(file("Seinfeld 4x11 The Contest.avi", "TV"))!!
         assertEquals("Seinfeld", alt.show)
         assertEquals(4 to 11, alt.season to alt.episode)
+    }
+
+    @Test
+    fun yearsComeOffSeriesNames() {
+        val ep = LocalLibraryParser.episodeOf(file("True.Detective.(2014).S01E01.The.Long.Bright.Dark.mkv", "TV"))!!
+        assertEquals("True Detective", ep.show)
+        assertEquals("2014", ep.year)
+        val bare = LocalLibraryParser.episodeOf(file("Doctor Who 2005 S01E01.mkv", "TV"))!!
+        assertEquals("Doctor Who", bare.show)
+        assertEquals("2005", bare.year)
+        val fromFolder = LocalLibraryParser.episodeOf(file("S01E01.mkv", "True Detective (2014)", "Season 1"))!!
+        assertEquals("True Detective", fromFolder.show)
     }
 
     @Test
@@ -50,6 +63,28 @@ class LocalLibraryParserTest {
         assertNull(noYear.year)
         // "Season 1"-less numbered files aren't mistaken for episodes.
         assertNull(LocalLibraryParser.episodeOf(file("01 Intro.mkv", "Videos")))
+    }
+
+    @Test
+    fun onlineArtworkFillsGapsAndMergesTheSameShow() {
+        val index = LocalLibraryParser.parse(
+            listOf(
+                file("The.Office.US.S02E01.mkv", "Qb"),
+                file("The.Office.Extended.Cut.S01E01.mkv", "Qb"),
+                file("Own Poster (2001).mkv", "Movies", ownArt = "file:///own.jpg"),
+            ),
+        )
+        assertEquals(2, index.shows.size)
+        val art = LocalArt(imdbId = "tt0386676", poster = "https://img/office.jpg")
+        val withArt = index.shows.fold(index) { acc, show -> acc.withArt(show.first.id, art) }
+            .withArt(index.movies.single().id, LocalArt(imdbId = "tt1", poster = "https://img/other.jpg"))
+        // Own pictures win over online ones; the id still comes along for rated artwork.
+        assertEquals("file:///own.jpg", withArt.movies.single().poster)
+        assertEquals("tt1", withArt.movies.single().imdbId)
+        val merged = withArt.mergeSameShows()
+        val (show, details) = merged.shows.single()
+        assertEquals("https://img/office.jpg", show.poster)
+        assertEquals(listOf(1, 2), details.seasons.map { it.number })
     }
 
     @Test
