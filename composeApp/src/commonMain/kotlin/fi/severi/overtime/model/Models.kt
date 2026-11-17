@@ -51,9 +51,16 @@ data class EpgData(
 ) {
     val isEmpty get() = programmes.isEmpty()
 
+    /** Guide channel ids by their lower-case form, for ids that differ from the playlist's only in case. */
+    private val idsByLowercase: Map<String, String> by lazy { programmes.keys.associateBy { it.lowercase() } }
+
     /** Resolves the XMLTV channel id for a channel, by tvg-id first and then by display name. */
     fun resolveId(channel: Channel): String? {
-        channel.epgId?.let { if (programmes.containsKey(it)) return it }
+        channel.epgId?.let { id ->
+            if (programmes.containsKey(id)) return id
+            // Playlists and guides don't always agree on case ("jim.fi" vs "Jim.fi").
+            idsByLowercase[id.lowercase()]?.let { return it }
+        }
         val name = channel.name.lowercase()
         nameToId[name]?.let { return it }
         return nameToId[name.removeSuffix(" hd").removeSuffix(" fhd").removeSuffix(" uhd").trim()]
