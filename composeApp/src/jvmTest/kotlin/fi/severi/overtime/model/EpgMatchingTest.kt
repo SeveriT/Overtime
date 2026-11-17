@@ -14,4 +14,13 @@ class EpgMatchingTest {
         assertEquals("Jim.fi", guide.resolveId(channel))
         assertEquals(programme, guide.nowNext(channel, now = 30_000).first)
     }
+
+    @Test
+    fun tvgIdMatchesRegardlessOfSpaces() {
+        fun guideWith(id: String) = EpgData(programmes = mapOf(id to listOf(Programme(id, 0, 60_000, "Sport"))))
+        fun channel(epgId: String) = Channel("s:2", "s", "Channel", "Sport", "http://x/2.ts", epgId = epgId)
+        // Playlist with spaces, guide without, and the other way round.
+        assertEquals("Eurosport1.fi", guideWith("Eurosport1.fi").resolveId(channel("Eurosport 1.fi")))
+        assertEquals("BBC Three HD.uk", guideWith("BBC Three HD.uk").resolveId(channel("BBCThreeHD.uk")))
+    }
 }
