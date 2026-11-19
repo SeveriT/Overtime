@@ -1,17 +1,21 @@
-"""Generates the Overtime app icon: a master PNG, the window icon PNG and a multi-size Windows ICO.
+"""Generates the Overtime app icon for the Windows app (master PNG, window icon PNG, multi-size ICO) and,
+optionally, the Android app's launcher icon layers.
 
 Design: the Material Icons "live_tv" glyph (Rounded: a TV with antennas and a play triangle) in near black
-(#0A0A0B) on a light blue (#8AD0F2) rounded square. It is the same icon the Android app shows for Live TV,
-and the Android launcher icon uses the same colours, so both apps share one look.
+(#0A0A0B) on a light blue (#8AD0F2) circle. The TV casts a soft shadow down and to the right, and the
+circle is shaded slightly along its bottom edge. Both apps share this look.
 
 Glyph source (Apache 2.0, Compose material-icons-extended Icons.Rounded.LiveTv): tools/symbols/live_tv_rounded_24px.svg
 
-Run from the repo root:  python tools/make_icon.py
+Run from the repo root:
+    python tools/make_icon.py
+    python tools/make_icon.py --android <OvertimeAndroid>/app/src/main/res
 """
+import argparse
 import re
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
 ICON_DIR = ROOT / "composeApp" / "icons"
@@ -22,8 +26,17 @@ BACKGROUND = (0x8A, 0xD0, 0xF2)  # light blue (#8AD0F2), chosen by the user
 GLYPH = (0x0A, 0x0A, 0x0B)       # near black (#0A0A0B)
 
 ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
-SMALL_MAX = 32                # sizes up to this use the 20 px optical size
+SMALL_MAX = 32                # sizes up to this use a larger glyph and no shadows, to stay crisp
 SS = 8                        # supersampling factor
+
+# Shadows, as shares of the icon size (tuned against the reference image the user picked).
+GLYPH_SHADOW_DX = 0.020       # the TV's shadow falls down and to the right
+GLYPH_SHADOW_DY = 0.030
+GLYPH_SHADOW_BLUR = 0.025
+GLYPH_SHADOW_OPACITY = 0.27
+RIM_SHIFT = 0.020             # the circle's own edge shading, strongest at the bottom
+RIM_BLUR = 0.020
+RIM_OPACITY = 0.17
 
 # ---- tiny SVG path reader (M L H V Q T C S Z, absolute and relative) -------------------
 
@@ -118,7 +131,6 @@ def load_symbol():
     return parse_path(re.search(r'\sd="([^"]+)"', svg).group(1))
 
 
-
 def _mask(polygons, size, scale, offset, offset_y):
     """Even-odd fill: XOR of every polygon, which keeps the screen hollow and the triangle solid."""
     mask = Image.new("1", (size, size), 0)
@@ -130,32 +142,71 @@ def _mask(polygons, size, scale, offset, offset_y):
     return mask.convert("L")
 
 
-# ---- icon --------------------------------------------------------------------------
+def _shifted(mask, dx, dy):
+    """[mask] moved by (dx, dy) pixels, with empty space coming in at the edges."""
+    out = Image.new("L", mask.size, 0)
+    out.paste(mask, (round(dx), round(dy)))
+    return out
+
+
+def _scaled(mask, opacity):
+    return mask.point(lambda v: round(v * opacity))
+
+
+def _circle(s, margin):
+    mask = Image.new("L", (s, s), 0)
+    ImageDraw.Draw(mask).ellipse([margin, margin, s - margin - 1, s - margin - 1], fill=255)
+    return mask
+
+
+def _glyph_mask(s, glyph_box):
+    """The TV glyph in an s x s canvas: glyph_box px wide, its screen (not the antennas) centred."""
+    scale = glyph_box / VIEWBOX
+    offset = (s - glyph_box) / 2
+    offset_y = s / 2 - SCREEN_CENTRE_Y * scale
+    return _mask(load_symbol(), s, scale, offset, offset_y)
+
+
+def _glyph_shadow(glyph, unit):
+    """Soft shadow of the glyph, as an alpha mask; [unit] is the icon size the shadow shares refer to."""
+    shadow = _shifted(glyph, GLYPH_SHADOW_DX * unit, GLYPH_SHADOW_DY * unit)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(GLYPH_SHADOW_BLUR * unit))
+    return _scaled(shadow, GLYPH_SHADOW_OPACITY)
+
+
+def _rim_shade(circle, unit):
+    """Shading inside the circle along its edge, strongest at the bottom, as an alpha mask."""
+    outside = ImageChops.invert(_shifted(circle, 0, -RIM_SHIFT * unit))
+    shade = outside.filter(ImageFilter.GaussianBlur(RIM_BLUR * unit))
+    return ImageChops.multiply(_scaled(shade, RIM_OPACITY), circle)
+
+
+def _paint(img, colour, alpha):
+    img.paste(Image.new("RGBA", img.size, colour + (255,)), (0, 0), alpha)
+
+
+# ---- Windows icon ---------------------------------------------------------------------
 
 def render(size):
     small = size <= SMALL_MAX
     s = max(size * SS, 1024)
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
 
-    # Rounded square, nearly full bleed, corner ≈ 22 % (an extra-large M3 corner at icon scale).
-    margin = round(s * (0.02 if small else 0.04))
-    radius = round(s * 0.22)
-    ImageDraw.Draw(img).rounded_rectangle([margin, margin, s - margin - 1, s - margin - 1], radius, fill=BACKGROUND)
+    circle = _circle(s, round(s * (0.02 if small else 0.0)))
+    _paint(img, BACKGROUND, circle)
 
     # Glyph box as a share of the icon. The TV fills 22/24 of its box, so 0.72 puts it at ~66 % of the
     # icon width with breathing room; small sizes run a bit larger to stay legible.
-    glyph_box = s * (0.80 if small else 0.72)
-    scale = glyph_box / VIEWBOX
-    offset = (s - glyph_box) / 2
-    # Centre the TV's screen (y 6..22 of the glyph), not the whole glyph: the antennas would push it low.
-    offset_y = s / 2 - SCREEN_CENTRE_Y * scale
-
-    polygons = load_symbol()
-    img.paste(Image.new("RGBA", (s, s), GLYPH + (255,)), (0, 0), _mask(polygons, s, scale, offset, offset_y))
+    glyph = _glyph_mask(s, s * (0.80 if small else 0.72))
+    if not small:
+        _paint(img, (0, 0, 0), _rim_shade(circle, s))
+        _paint(img, (0, 0, 0), ImageChops.multiply(_glyph_shadow(glyph, s), circle))
+    _paint(img, GLYPH, glyph)
+    img.putalpha(circle)
     return img.resize((size, size), Image.LANCZOS)
 
 
-def main():
+def write_windows():
     ICON_DIR.mkdir(parents=True, exist_ok=True)
     RES_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -169,6 +220,62 @@ def main():
         append_images=images[:-1],
     )
     print("Wrote", ICON_DIR / "overtime.png", ICON_DIR / "overtime.ico", RES_DIR / "overtime_icon.png")
+
+
+# ---- Android launcher icon ------------------------------------------------------------
+
+# Adaptive icon layers are 108 dp; the launcher shows the middle 72 dp through its own mask shape.
+ADAPTIVE_DP = 108
+VISIBLE_DP = 72
+DENSITIES = {"mdpi": 1.0, "hdpi": 1.5, "xhdpi": 2.0, "xxhdpi": 3.0, "xxxhdpi": 4.0}
+LEGACY_DP = 48
+BOTTOM_SHADE_HEIGHT = 0.12  # share of the visible icon, at the bottom, that darkens
+
+
+def _adaptive_layers(px):
+    """Foreground (glyph + its shadow) and background (blue + rim shade) layers, px x px."""
+    s = px * SS
+    unit = s * VISIBLE_DP / ADAPTIVE_DP  # the shadows are tuned to the visible icon, not the 108 dp layer
+    glyph = _glyph_mask(s, unit * 0.72)
+    fg = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    _paint(fg, (0, 0, 0), _glyph_shadow(glyph, unit))
+    _paint(fg, GLYPH, glyph)
+
+    # The launcher picks the mask shape (circle, squircle, rounded square), so instead of the Windows
+    # icon's circle rim the background darkens towards the bottom of the visible area, which reads the
+    # same under any shape.
+    bg = Image.new("RGBA", (s, s), BACKGROUND + (255,))
+    bottom = (s + unit) / 2
+    band = BOTTOM_SHADE_HEIGHT * unit
+    shade = Image.new("L", (1, s), 0)
+    for y in range(s):
+        t = min(max((y - (bottom - band)) / band, 0.0), 1.0)
+        shade.putpixel((0, y), round(255 * RIM_OPACITY * t * t))
+    _paint(bg, (0, 0, 0), shade.resize((s, s)))
+    return fg.resize((px, px), Image.LANCZOS), bg.resize((px, px), Image.LANCZOS)
+
+
+def write_android(res):
+    res = Path(res)
+    for name, density in DENSITIES.items():
+        folder = res / f"mipmap-{name}"
+        folder.mkdir(parents=True, exist_ok=True)
+        fg, bg = _adaptive_layers(round(ADAPTIVE_DP * density))
+        fg.save(folder / "ic_launcher_foreground.webp", lossless=True)
+        bg.save(folder / "ic_launcher_background.webp", lossless=True)
+        legacy = render(round(LEGACY_DP * density))
+        legacy.save(folder / "ic_launcher.webp", lossless=True)
+        legacy.save(folder / "ic_launcher_round.webp", lossless=True)
+    print("Wrote Android launcher icons under", res)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--android", metavar="RES_DIR", help="also write the Android app's launcher icons")
+    args = parser.parse_args()
+    write_windows()
+    if args.android:
+        write_android(args.android)
 
 
 if __name__ == "__main__":
