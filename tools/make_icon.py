@@ -2,8 +2,8 @@
 optionally, the Android app's launcher icon layers.
 
 Design: the Material Icons "live_tv" glyph (Rounded: a TV with antennas and a play triangle) in near black
-(#0A0A0B) on a light blue (#8AD0F2) circle. The TV casts a soft shadow down and to the right, and the
-circle is shaded slightly along its bottom edge. Both apps share this look.
+(#0A0A0B) on a light blue (#8AD0F2) rounded square. The TV casts a soft shadow down and to the right,
+and the square is shaded slightly along its bottom edge. Both apps share this look.
 
 Glyph source (Apache 2.0, Compose material-icons-extended Icons.Rounded.LiveTv): tools/symbols/live_tv_rounded_24px.svg
 
@@ -34,7 +34,7 @@ GLYPH_SHADOW_DX = 0.020       # the TV's shadow falls down and to the right
 GLYPH_SHADOW_DY = 0.030
 GLYPH_SHADOW_BLUR = 0.025
 GLYPH_SHADOW_OPACITY = 0.27
-RIM_SHIFT = 0.020             # the circle's own edge shading, strongest at the bottom
+RIM_SHIFT = 0.020             # the shape's own edge shading, strongest at the bottom
 RIM_BLUR = 0.020
 RIM_OPACITY = 0.17
 
@@ -153,9 +153,10 @@ def _scaled(mask, opacity):
     return mask.point(lambda v: round(v * opacity))
 
 
-def _circle(s, margin):
+def _rounded_square(s, margin):
+    """Nearly full-bleed rounded square, corner ≈ 22 % (an extra-large M3 corner at icon scale)."""
     mask = Image.new("L", (s, s), 0)
-    ImageDraw.Draw(mask).ellipse([margin, margin, s - margin - 1, s - margin - 1], fill=255)
+    ImageDraw.Draw(mask).rounded_rectangle([margin, margin, s - margin - 1, s - margin - 1], round(s * 0.22), fill=255)
     return mask
 
 
@@ -174,11 +175,11 @@ def _glyph_shadow(glyph, unit):
     return _scaled(shadow, GLYPH_SHADOW_OPACITY)
 
 
-def _rim_shade(circle, unit):
-    """Shading inside the circle along its edge, strongest at the bottom, as an alpha mask."""
-    outside = ImageChops.invert(_shifted(circle, 0, -RIM_SHIFT * unit))
+def _rim_shade(shape, unit):
+    """Shading inside the shape along its edge, strongest at the bottom, as an alpha mask."""
+    outside = ImageChops.invert(_shifted(shape, 0, -RIM_SHIFT * unit))
     shade = outside.filter(ImageFilter.GaussianBlur(RIM_BLUR * unit))
-    return ImageChops.multiply(_scaled(shade, RIM_OPACITY), circle)
+    return ImageChops.multiply(_scaled(shade, RIM_OPACITY), shape)
 
 
 def _paint(img, colour, alpha):
@@ -192,17 +193,17 @@ def render(size):
     s = max(size * SS, 1024)
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
 
-    circle = _circle(s, round(s * (0.02 if small else 0.0)))
-    _paint(img, BACKGROUND, circle)
+    shape = _rounded_square(s, round(s * (0.02 if small else 0.04)))
+    _paint(img, BACKGROUND, shape)
 
     # Glyph box as a share of the icon. The TV fills 22/24 of its box, so 0.72 puts it at ~66 % of the
     # icon width with breathing room; small sizes run a bit larger to stay legible.
     glyph = _glyph_mask(s, s * (0.80 if small else 0.72))
     if not small:
-        _paint(img, (0, 0, 0), _rim_shade(circle, s))
-        _paint(img, (0, 0, 0), ImageChops.multiply(_glyph_shadow(glyph, s), circle))
+        _paint(img, (0, 0, 0), _rim_shade(shape, s))
+        _paint(img, (0, 0, 0), ImageChops.multiply(_glyph_shadow(glyph, s), shape))
     _paint(img, GLYPH, glyph)
-    img.putalpha(circle)
+    img.putalpha(shape)
     return img.resize((size, size), Image.LANCZOS)
 
 
@@ -242,7 +243,7 @@ def _adaptive_layers(px):
     _paint(fg, GLYPH, glyph)
 
     # The launcher picks the mask shape (circle, squircle, rounded square), so instead of the Windows
-    # icon's circle rim the background darkens towards the bottom of the visible area, which reads the
+    # icon's rim shade the background darkens towards the bottom of the visible area, which reads the
     # same under any shape.
     bg = Image.new("RGBA", (s, s), BACKGROUND + (255,))
     bottom = (s + unit) / 2
