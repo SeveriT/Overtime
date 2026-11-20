@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.window.WindowPosition
@@ -78,6 +79,7 @@ private fun loadAppIcon(): Painter? = runCatching {
 }.getOrNull()
 
 fun main() {
+    StartupLog.mark("java")
     ErrorLog.install()
     runApp()
 }
@@ -87,8 +89,9 @@ private fun runApp() = application {
     val appIcon = remember { loadAppIcon() }
     val repo = remember { Repository(FileStore()) }
     // VLC takes the subtitle look at start-up, so it comes from the saved settings.
-    val playerResult = remember { runCatching { VlcPlayer(repo.loadSettings().subtitles) } }
-    val vm = remember { playerResult.getOrNull()?.let { AppViewModel(repo, it) } }
+    val playerResult = remember { runCatching { VlcPlayer(repo.loadSettings().subtitles) }.also { StartupLog.mark("vlc") } }
+    // Settings, sources and the cached channel lists.
+    val vm = remember { playerResult.getOrNull()?.let { AppViewModel(repo, it) }.also { StartupLog.mark("data") } }
 
     val saved = remember { vm?.settings?.value?.window }
     val windowState = rememberWindowState(
@@ -208,6 +211,10 @@ private fun runApp() = application {
             // Narrowest the player controls fit (rewind bar and two button rows), and tall enough for them
             // and the channel title. In the same scaled units as dp.
             LaunchedEffect(window) { window.minimumSize = Dimension(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT) }
+            LaunchedEffect(Unit) {
+                withFrameNanos { }
+                StartupLog.finish()
+            }
             // Re-applied after fullscreen changes in case the native window was recreated.
             LaunchedEffect(window, fullscreen, titleBarColor) {
                 TitleBar.apply(

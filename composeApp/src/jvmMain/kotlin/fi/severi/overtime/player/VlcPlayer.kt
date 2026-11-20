@@ -193,6 +193,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
 
     init {
         buildPluginCache = useBundledVlc()
+        if (buildPluginCache) fi.severi.overtime.StartupLog.note("VLC plugin cache built")
         check(NativeDiscovery().discover()) {
             "VLC was not found. Install VLC 3 (64-bit) from videolan.org, or use the Overtime download that includes it."
         }

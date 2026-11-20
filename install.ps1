@@ -36,6 +36,19 @@ if (Test-Path $installDir) {
 New-Item -ItemType Directory -Path (Split-Path $installDir) -Force | Out-Null
 Copy-Item $appImage $installDir -Recurse
 
+# VLC's plugin cache (plugins.dat) isn't shipped, so the first start would load all ~360 plugins to make
+# it, which after a reboot can take many seconds. Make it now with the VLC the bundled copy comes from.
+$cacheGen = Join-Path $env:ProgramFiles 'VideoLAN\VLC\vlc-cache-gen.exe'
+$plugins = Join-Path $installDir 'app\resources\vlc\plugins'
+if ((Test-Path $cacheGen) -and (Test-Path $plugins)) {
+    Write-Host 'Building the VLC plugin cache...'
+    $gen = Start-Process -FilePath $cacheGen -ArgumentList "`"$plugins`"" -NoNewWindow -PassThru
+    if (-not $gen.WaitForExit(60000)) { $gen.Kill() }
+    if (-not (Test-Path (Join-Path $plugins 'plugins.dat'))) {
+        Write-Host 'VLC plugin cache not made; Overtime makes it on its first start instead.'
+    }
+}
+
 $exe = Join-Path $installDir 'Overtime.exe'
 $shell = New-Object -ComObject WScript.Shell
 
