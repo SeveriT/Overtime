@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -202,6 +203,10 @@ private fun PipContent(vm: AppViewModel, window: Window, onBack: () -> Unit, onC
                         if (state.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                         if (state.muted) "Unmute" else "Mute",
                     ) { vm.player.toggleMute() }
+                    // Fits the window to the video again, e.g. after switching to a channel of another shape.
+                    PipButton(Icons.Default.FitScreen, "Fit the window to the video") {
+                        (vm.player as? VlcPlayer)?.displayAspect?.let { fitToAspect(window, it) }
+                    }
                     PipButton(Icons.Default.OpenInFull, "Back to the full window") { onBack() }
                     PipButton(Icons.Default.Close, "Close (pauses)") { onClose() }
                 }

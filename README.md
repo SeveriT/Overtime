@@ -33,7 +33,7 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 - Picture settings: brightness, contrast and saturation
 - Stream info: resolution, frame rate, codec, bitrate and more, with copy stream URL
 - Fullscreen and customisable keyboard shortcuts
-- Picture-in-picture: a small always-on-top window you can move and resize, with play/pause, channel and mute controls; minimising the window while something plays switches to it
+- Picture-in-picture: a small always-on-top window you can move and resize, with play/pause, channel, mute and fit-to-video controls; minimising the window while something plays switches to it
 
 ### Look
 - Material 3 Expressive design
