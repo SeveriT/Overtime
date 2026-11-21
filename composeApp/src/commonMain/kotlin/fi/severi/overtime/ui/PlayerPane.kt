@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Pause
@@ -587,6 +588,7 @@ private fun ToolbarButtons(
 
             TracksButton(vm)
             PictureButton(vm)
+            ToolbarButton(Icons.Default.PictureInPictureAlt, "Picture-in-picture (P)") { vm.enterPip() }
             ToolbarButton(
                 if (fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                 if (fullscreen) "Exit fullscreen (F)" else "Fullscreen (F)",

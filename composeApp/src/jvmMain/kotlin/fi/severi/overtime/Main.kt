@@ -63,7 +63,7 @@ private const val MIN_WINDOW_HEIGHT = 480
 private const val FULLSCREEN_EXIT_SETTLE_MS = 150L
 
 /** True when a usable part of the saved window lies on a connected screen (a monitor may have been unplugged). */
-private fun isOnScreen(b: WindowBounds): Boolean = runCatching {
+internal fun isOnScreen(b: WindowBounds): Boolean = runCatching {
     // AWT screen bounds use the same scaled units as Compose's dp window position.
     val rect = Rectangle(b.x, b.y, b.width, b.height)
     GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.any { device ->
@@ -136,6 +136,18 @@ private fun runApp() = application {
         }
     }
 
+    // Picture-in-picture: the main window is minimised while the small one shows the video. Minimising it
+    // while something plays switches to picture-in-picture too, and restoring it from the taskbar ends it.
+    val pip by (vm?.pip ?: MutableStateFlow(false)).collectAsState()
+    LaunchedEffect(pip) { if (pip) windowState.isMinimized = true }
+    LaunchedEffect(windowState) {
+        snapshotFlow { windowState.isMinimized }.collect { minimized ->
+            if (vm == null) return@collect
+            if (minimized && !vm.pip.value && vm.isPlaying) vm.enterPip()
+            if (!minimized && vm.pip.value) vm.leavePip()
+        }
+    }
+
     // Errors are logged to error.log; a harmless Compose teardown error is not shown.
     CompositionLocalProvider(LocalWindowExceptionHandlerFactory provides ErrorLog.windowHandlerFactory) {
         Window(
@@ -163,6 +175,7 @@ private fun runApp() = application {
                         pressed(Shortcut.BACK) || pressed(Shortcut.LIBRARY) -> { vm.library.close(); true }
                         pressed(Shortcut.PLAY_PAUSE) -> { vm.player.togglePause(); true }
                         pressed(Shortcut.FULLSCREEN) -> { vm.toggleFullscreen(); true }
+                        pressed(Shortcut.PIP) -> { vm.enterPip(); true }
                         else -> false
                     }
                 }
@@ -179,6 +192,7 @@ private fun runApp() = application {
                 val onDemand = vm.currentVod.value != null
                 when {
                     pressed(Shortcut.FULLSCREEN) -> { vm.toggleFullscreen(); true }
+                    pressed(Shortcut.PIP) -> { vm.enterPip(); true }
                     pressed(Shortcut.GUIDE) -> { vm.toggleGuide(); true }
                     pressed(Shortcut.LIBRARY) -> { if (vm.hasLibrary.value) vm.openLibrary(); true }
                     pressed(Shortcut.BACK) -> when {
@@ -238,6 +252,17 @@ private fun runApp() = application {
                     }
                 }
             }
+        }
+        if (vm != null && pip) {
+            PipWindow(
+                vm,
+                icon = appIcon,
+                onBack = {
+                    vm.leavePip()
+                    windowState.isMinimized = false
+                },
+                onClose = { vm.closePip() },
+            )
         }
     }
 }

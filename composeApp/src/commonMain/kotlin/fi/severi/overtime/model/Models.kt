@@ -155,6 +155,8 @@ data class AppSettings(
     val picture: PictureAdjust = PictureAdjust(),
     /** Window bounds (dp) when it was last closed, restored at launch; null until first closed. */
     val window: WindowBounds? = null,
+    /** Picture-in-picture window bounds (dp) when it was last closed; null until first used. */
+    val pipWindow: WindowBounds? = null,
 )
 
 /**

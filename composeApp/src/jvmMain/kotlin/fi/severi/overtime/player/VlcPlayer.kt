@@ -260,6 +260,18 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
         picture.value = adjust
     }
 
+    /** Shape of the picture as shown (width / height, pixel aspect included); null until a frame has arrived. */
+    internal val displayAspect: Float?
+        get() {
+            val (width, height) = if (usingYuv) {
+                if (!yuv.hasFrame) return null
+                yuv.width to yuv.height
+            } else {
+                frame.value?.let { it.width to it.height } ?: return null
+            }
+            return if (width > 0 && height > 0) width * pixelAspect / height else null
+        }
+
     /** Sample aspect ratio of the playing video (1 for square pixels), read from the stream. */
     @Volatile internal var pixelAspect = 1f
 

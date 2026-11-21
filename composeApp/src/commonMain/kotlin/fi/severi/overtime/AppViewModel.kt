@@ -170,6 +170,32 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
 
     fun toggleFullscreen() = setFullscreen(!fullscreen.value)
 
+    /**
+     * Picture-in-picture: the video in a small always-on-top window while the main window is minimised.
+     * The windows themselves are handled in Main.kt; this is just whether it's on.
+     */
+    val pip = MutableStateFlow(false)
+
+    /** A channel, movie or episode is open (playing or paused), so there's something to show in a small window. */
+    val hasPlayback: Boolean get() = currentChannel.value != null || currentVod.value != null
+
+    /** Playing right now (not paused or failed): minimising the window then switches to picture-in-picture. */
+    val isPlaying: Boolean get() = hasPlayback && player.state.value.let { !it.paused && it.error == null }
+
+    fun enterPip() {
+        if (hasPlayback) pip.value = true
+    }
+
+    fun leavePip() {
+        pip.value = false
+    }
+
+    /** Closing the small window pauses, like stopping it on a phone; the main window stays minimised. */
+    fun closePip() {
+        if (!player.state.value.paused) player.togglePause()
+        pip.value = false
+    }
+
     /** All channels of the selected source, in playlist order. */
     val sourceChannels: StateFlow<List<Channel>> = combine(_channels, selectedSourceId) { channels, sourceId ->
         channels[sourceId].orEmpty()

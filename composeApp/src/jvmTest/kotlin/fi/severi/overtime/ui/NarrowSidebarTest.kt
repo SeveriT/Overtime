@@ -59,7 +59,7 @@ class NarrowSidebarTest {
             frames(30)
             repeat(4) { round ->
                 // Show sidebar sits at the start of the one-row toolbar; Hide at the start of the second row.
-                val at = if (vm.sidebarVisible.value) Offset(463f, 644f) else Offset(148f, 640f)
+                val at = if (vm.sidebarVisible.value) Offset(439f, 644f) else Offset(124f, 640f)
                 val expected = !vm.sidebarVisible.value
                 scene.sendPointerEvent(PointerEventType.Move, at)
                 frames(70) // long enough for the tooltip to appear

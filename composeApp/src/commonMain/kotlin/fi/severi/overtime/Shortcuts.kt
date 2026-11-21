@@ -28,6 +28,7 @@ enum class Shortcut(val label: String, val group: ShortcutGroup, val defaults: L
     SUBTITLES("Next subtitle track", ShortcutGroup.PLAYER, listOf(combo(Key.V))),
     NEXT_EPISODE("Next episode", ShortcutGroup.PLAYER, listOf(combo(Key.N))),
     FULLSCREEN("Fullscreen", ShortcutGroup.PLAYER, listOf(combo(Key.F), combo(Key.F11))),
+    PIP("Picture-in-picture", ShortcutGroup.PLAYER, listOf(combo(Key.P))),
     SIDEBAR("Show / hide sidebar", ShortcutGroup.PLAYER, listOf(combo(Key.S))),
     STREAM_INFO("Stream info", ShortcutGroup.PLAYER, listOf(combo(Key.I))),
     GUIDE("Programme guide", ShortcutGroup.PLAYER, listOf(combo(Key.G))),

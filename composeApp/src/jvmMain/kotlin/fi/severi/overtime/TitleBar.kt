@@ -17,6 +17,8 @@ object TitleBar {
     private const val DWMWA_BORDER_COLOR = 34
     private const val DWMWA_CAPTION_COLOR = 35
     private const val DWMWA_TEXT_COLOR = 36
+    private const val DWMWA_WINDOW_CORNER_PREFERENCE = 33
+    private const val DWMWCP_ROUNDSMALL = 3
 
     @Suppress("FunctionName")
     private interface DwmApi : Library {
@@ -37,6 +39,15 @@ object TitleBar {
             api.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, IntByReference(caption.toColorRef()), 4)
             api.DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, IntByReference(caption.toColorRef()), 4)
             api.DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, IntByReference(text.toColorRef()), 4)
+        }
+    }
+
+    /** Gives a borderless window Windows 11's small rounded corners (ignored on older Windows). */
+    fun roundSmallCorners(window: Window) {
+        val api = dwm ?: return
+        runCatching {
+            val hwnd = Native.getWindowPointer(window) ?: return
+            api.DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, IntByReference(DWMWCP_ROUNDSMALL), 4)
         }
     }
 
