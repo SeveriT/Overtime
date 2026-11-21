@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.window.WindowPosition
 import fi.severi.overtime.model.WindowBounds
 import java.awt.Dimension
+import java.awt.Frame
+import javax.swing.Timer
 import java.awt.GraphicsEnvironment
 import java.awt.Rectangle
 import kotlin.math.roundToInt
@@ -71,6 +73,21 @@ internal fun isOnScreen(b: WindowBounds): Boolean = runCatching {
         visible.width >= 200 && visible.height >= 100
     }
 }.getOrDefault(false)
+
+/**
+ * After the window comes back from picture-in-picture, makes sure its title bar isn't left above the top
+ * of the screen (it can be, if the window came back un-maximised at its maximised bounds).
+ */
+private fun keepTitleBarOnScreen(window: Frame) {
+    Timer(TITLE_BAR_CHECK_DELAY_MS) {
+        if (window.extendedState and Frame.MAXIMIZED_BOTH != 0 || window.isUndecorated) return@Timer
+        val screen = window.graphicsConfiguration?.bounds ?: return@Timer
+        if (window.y < screen.y) window.setLocation(window.x, screen.y)
+    }.apply { isRepeats = false }.start()
+}
+
+/** Time for the window to finish restoring before its position is checked. */
+private const val TITLE_BAR_CHECK_DELAY_MS = 300
 
 /** Window and taskbar icon; the exe and installer use composeApp/icons/overtime.ico. */
 private fun loadAppIcon(): Painter? = runCatching {
@@ -139,6 +156,7 @@ private fun runApp() = application {
     // Picture-in-picture: the main window is minimised while the small one shows the video. Minimising it
     // while something plays switches to picture-in-picture too, and restoring it from the taskbar ends it.
     val pip by (vm?.pip ?: MutableStateFlow(false)).collectAsState()
+    var mainWindow by remember { mutableStateOf<Frame?>(null) }
     LaunchedEffect(pip) { if (pip) windowState.isMinimized = true }
     LaunchedEffect(windowState) {
         snapshotFlow { windowState.isMinimized }.collect { minimized ->
@@ -224,7 +242,10 @@ private fun runApp() = application {
         ) {
             // Narrowest the player controls fit (rewind bar and two button rows), and tall enough for them
             // and the channel title. In the same scaled units as dp.
-            LaunchedEffect(window) { window.minimumSize = Dimension(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT) }
+            LaunchedEffect(window) {
+                window.minimumSize = Dimension(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+                mainWindow = window
+            }
             LaunchedEffect(Unit) {
                 withFrameNanos { }
                 StartupLog.finish()
@@ -259,7 +280,9 @@ private fun runApp() = application {
                 icon = appIcon,
                 onBack = {
                     vm.leavePip()
-                    windowState.isMinimized = false
+                    val main = mainWindow
+                    if (main == null || !TitleBar.restoreMinimized(main)) windowState.isMinimized = false
+                    main?.let(::keepTitleBarOnScreen)
                 },
                 onClose = { vm.closePip() },
             )

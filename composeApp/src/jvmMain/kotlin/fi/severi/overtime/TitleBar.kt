@@ -30,6 +30,34 @@ object TitleBar {
         else runCatching { Native.load("dwmapi", DwmApi::class.java) }.getOrNull()
     }
 
+    @Suppress("FunctionName")
+    private interface User32Api : Library {
+        fun ShowWindow(hwnd: Pointer, command: Int): Boolean
+        fun SetForegroundWindow(hwnd: Pointer): Boolean
+    }
+
+    private const val SW_RESTORE = 9
+
+    private val user32: User32Api? by lazy {
+        if (!System.getProperty("os.name").orEmpty().startsWith("Windows")) null
+        else runCatching { Native.load("user32", User32Api::class.java) }.getOrNull()
+    }
+
+    /**
+     * Brings a minimised window back the way clicking its taskbar button does: to its maximised or normal
+     * size, whichever it had. (Restoring it through Java can leave a maximised window un-maximised at its
+     * maximised bounds, with the title bar above the screen.) Returns false if that isn't available.
+     */
+    fun restoreMinimized(window: Window): Boolean {
+        val api = user32 ?: return false
+        return runCatching {
+            val hwnd = Native.getWindowPointer(window) ?: return false
+            api.ShowWindow(hwnd, SW_RESTORE)
+            api.SetForegroundWindow(hwnd)
+            true
+        }.getOrDefault(false)
+    }
+
     /** [darkMode] picks light (true) or dark (false) caption button glyphs. */
     fun apply(window: Window, caption: Color, text: Color, darkMode: Boolean) {
         val api = dwm ?: return
