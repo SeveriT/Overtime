@@ -58,6 +58,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
@@ -344,6 +349,7 @@ private fun ColumnScope.ChannelList(
                     favorite = channel.id in favorites,
                     onClick = { vm.play(channel) },
                     onToggleFavorite = { vm.toggleFavorite(channel) },
+                    onHide = { vm.hideChannel(channel) },
                 )
             }
         }
@@ -367,7 +373,10 @@ private fun SourcePicker(label: String, options: List<Pair<String, String>>, onP
     }
 }
 
-/** A channel as a drawer-style pill: logo, name, now playing with progress, favourite toggle. */
+/**
+ * A channel as a drawer-style pill: logo, name, now playing with progress, favourite toggle. Right-click
+ * opens a menu to hide it (Settings > Hidden channels brings it back).
+ */
 @Composable
 private fun ChannelRow(
     channel: Channel,
@@ -377,15 +386,21 @@ private fun ChannelRow(
     favorite: Boolean,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onHide: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
     Surface(
         onClick = onClick,
         selected = selected,
         shape = CircleShape,
         color = if (selected) scheme.secondaryContainer else Color.Transparent,
         contentColor = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .onSecondaryClick { menuOpen = true },
     ) {
         Row(
             Modifier.padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
@@ -437,6 +452,30 @@ private fun ChannelRow(
                     contentDescription = if (favorite) "Remove from favorites" else "Add to favorites",
                     modifier = Modifier.size(20.dp),
                 )
+            }
+        }
+    }
+    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = MaterialTheme.shapes.large) {
+        DropdownMenuItem(
+            text = { Text("Hide channel") },
+            leadingIcon = { Icon(Icons.Default.VisibilityOff, contentDescription = null) },
+            onClick = {
+                menuOpen = false
+                onHide()
+            },
+        )
+    }
+    }
+}
+
+/** Runs [onClick] on a right-click (secondary button press) on this element. */
+private fun Modifier.onSecondaryClick(onClick: () -> Unit): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                event.changes.forEach { it.consume() }
+                onClick()
             }
         }
     }

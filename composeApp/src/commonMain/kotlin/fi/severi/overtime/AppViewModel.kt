@@ -198,10 +198,31 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         pip.value = false
     }
 
-    /** All channels of the selected source, in playlist order. */
-    val sourceChannels: StateFlow<List<Channel>> = combine(_channels, selectedSourceId) { channels, sourceId ->
-        channels[sourceId].orEmpty()
-    }.stateIn(scope, SharingStarted.Eagerly, _channels.value[selectedSourceId.value].orEmpty())
+    /** Ids of the channels the user hid. */
+    private val hiddenIds = _settings.map { it.hiddenChannels }.distinctUntilChanged()
+
+    /**
+     * All channels of the selected source, in playlist order, without the hidden ones. Groups, favourites,
+     * search, the guide and channel up/down all start from this list.
+     */
+    val sourceChannels: StateFlow<List<Channel>> = combine(_channels, selectedSourceId, hiddenIds) { channels, sourceId, hidden ->
+        channels[sourceId].orEmpty().filterNot { it.id in hidden }
+    }.stateIn(
+        scope,
+        SharingStarted.Eagerly,
+        _channels.value[selectedSourceId.value].orEmpty().filterNot { it.id in _settings.value.hiddenChannels },
+    )
+
+    /** The hidden channels of every source, by name, for Settings > Hidden channels. */
+    val hiddenChannels: StateFlow<List<Channel>> = combine(_channels, hiddenIds) { channels, hidden ->
+        channels.values.flatten().filter { it.id in hidden }.distinctBy { it.id }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /** Hides [channel] everywhere; whatever is playing keeps playing. */
+    fun hideChannel(channel: Channel) = updateSettings { it.copy(hiddenChannels = it.hiddenChannels + channel.id) }
+
+    fun showChannel(channel: Channel) = updateSettings { it.copy(hiddenChannels = it.hiddenChannels - channel.id) }
 
     /**
      * All channels and Favorites first, then the source's own groups in the chosen order, starred groups

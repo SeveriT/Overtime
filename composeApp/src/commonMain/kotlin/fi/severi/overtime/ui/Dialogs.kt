@@ -37,6 +37,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.key
@@ -158,7 +160,57 @@ private enum class SettingsPage(val label: String, val icon: ImageVector) {
     AUDIO_SUBTITLES("Audio & subtitles", Icons.Default.Subtitles),
     APPEARANCE("Appearance", Icons.Default.Palette),
     MOVIES("Movies & series", Icons.Default.Movie),
+    HIDDEN("Hidden channels", Icons.Default.VisibilityOff),
     SHORTCUTS("Shortcuts", Icons.Default.Keyboard),
+}
+
+/**
+ * Settings > Hidden channels: every channel the user hid (right-click > Hide channel), with Show to
+ * bring it back at once.
+ */
+@Composable
+private fun ColumnScope.HiddenChannelsPage(vm: AppViewModel) {
+    val hidden by vm.hiddenChannels.collectAsState()
+    val sources by vm.sources.collectAsState()
+    SectionHeader("Hidden channels")
+    if (hidden.isEmpty()) {
+        Text(
+            "No hidden channels. Right-click a channel in the list and choose Hide channel to hide it.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    Text(
+        "Hidden channels are left out of every group, Favourites, search, the guide and channel up/down.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    hidden.forEach { channel ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(channel.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val where = listOfNotNull(
+                    channel.group.takeIf { it.isNotBlank() },
+                    sources.firstOrNull { it.id == channel.sourceId }?.name?.takeIf { sources.size > 1 },
+                ).joinToString(" \u00B7 ")
+                if (where.isNotEmpty()) {
+                    Text(
+                        where,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            TextButton(onClick = { vm.showChannel(channel) }, shapes = ButtonDefaults.shapes()) {
+                Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                Text("Show")
+            }
+        }
+    }
 }
 
 /** The category Settings opened on last time (for this run of the app). */
@@ -682,6 +734,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                 }
             }
                             }
+                            SettingsPage.HIDDEN -> HiddenChannelsPage(vm)
                             SettingsPage.SHORTCUTS -> {
                                 SectionHeader("Keyboard shortcuts")
                                 ShortcutEditor(shortcutKeys, onChange = { shortcutKeys = it }, twoColumns = wide)

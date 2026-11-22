@@ -140,6 +140,8 @@ data class AppSettings(
     val lastSourceId: String? = null,
     val lastChannelId: String? = null,
     val favorites: Set<String> = emptySet(),
+    /** Channels the user hid (by id): left out of every list, the guide and channel up/down. */
+    val hiddenChannels: Set<String> = emptySet(),
     /** Starred channel groups as "<source id>|<group name>"; listed first, in their usual order. */
     val favoriteGroups: Set<String> = emptySet(),
     val volume: Int = 100,
