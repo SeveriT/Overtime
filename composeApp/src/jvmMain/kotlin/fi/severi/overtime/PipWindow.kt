@@ -34,6 +34,9 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Icon
+import fi.severi.overtime.data.formatClock
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -170,6 +173,9 @@ private fun PipContent(vm: AppViewModel, window: Window, onBack: () -> Unit, onC
     val hovered by hover.collectIsHoveredAsState()
     val state by vm.player.state.collectAsState()
     val channel by vm.currentChannel.collectAsState()
+    // What's on now on a live channel, from the TV guide (the clock ticks every 30 s).
+    val clock by vm.clock.collectAsState()
+    val programme = channel?.let { ch -> remember(ch.id, clock) { vm.nowNext(ch, clock).first } }
     val vod by vm.currentVod.collectAsState()
     val onDemand = vod != null
     Box(
@@ -191,14 +197,24 @@ private fun PipContent(vm: AppViewModel, window: Window, onBack: () -> Unit, onC
                         .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        vod?.title ?: channel?.name.orEmpty(),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            vod?.title ?: channel?.name.orEmpty(),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (vod == null && programme != null) {
+                            Text(
+                                "${formatClock(programme.start)}–${formatClock(programme.stop)}  ${programme.title}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.85f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                     PipButton(
                         if (state.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                         if (state.muted) "Unmute" else "Mute",
@@ -231,6 +247,18 @@ private fun PipContent(vm: AppViewModel, window: Window, onBack: () -> Unit, onC
                     } else {
                         PipButton(Icons.Default.SkipNext, "Next channel") { vm.step(1) }
                     }
+                }
+                // How far into the programme: a thin line along the bottom edge.
+                if (vod == null && programme != null) {
+                    val length = (programme.stop - programme.start).coerceAtLeast(1)
+                    LinearProgressIndicator(
+                        progress = { ((clock - programme.start).toFloat() / length).coerceIn(0f, 1f) },
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.White.copy(alpha = 0.25f),
+                        drawStopIndicator = {},
+                        gapSize = 0.dp,
+                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp),
+                    )
                 }
             }
         }

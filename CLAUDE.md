@@ -36,6 +36,6 @@ Unexpected errors are written to `%APPDATA%\Overtime\error.log` (`ErrorLog`).
   (exe/installer) and `composeApp/src/jvmMain/resources/overtime_icon.png` (window/taskbar).
   Design: Material Icons Rounded "live_tv" (SVG in `tools/symbols/`, same glyph as the Android app) in
   #0A0A0B (strokes thickened a little) on a #8AD0F2 rounded square with a flat 45° long shadow to the
-  bottom-right; sizes up to 32 px get a slightly larger glyph and no shadow. `--android <res>` also writes
+  bottom-right; sizes up to 32 px get a slightly larger glyph (the shadow shows at every size). `--android <res>` also writes
   Overtime Android's launcher layers. Edit the script,
   not the images.

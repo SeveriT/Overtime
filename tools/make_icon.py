@@ -26,7 +26,7 @@ BACKGROUND = (0x8A, 0xD0, 0xF2)  # light blue (#8AD0F2), chosen by the user
 GLYPH = (0x0A, 0x0A, 0x0B)       # near black (#0A0A0B)
 
 ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
-SMALL_MAX = 32                # sizes up to this use a larger glyph and no shadows, to stay crisp
+SMALL_MAX = 32                # sizes up to this get a slightly bigger glyph (and a smaller margin)
 SS = 8                        # supersampling factor
 
 # The TV's strokes are 2 glyph units thick; this much is added on every side (a bolder glyph).
@@ -215,10 +215,10 @@ def render(size):
     _paint(img, BACKGROUND, shape)
 
     # Glyph box as a share of the icon. The TV fills 22/24 of its box, so 0.72 puts it at ~66 % of the
-    # icon width with breathing room; small sizes run a bit larger to stay legible.
-    glyph = _glyph_mask(s, s * (0.80 if small else 0.72))
-    if not small:
-        _paint(img, (0, 0, 0), ImageChops.multiply(_long_shadow_alpha(glyph, s), shape))
+    # icon width with breathing room; small sizes run a touch larger to stay legible. Every size has the
+    # long shadow (the user wanted it on the taskbar and title bar sizes too).
+    glyph = _glyph_mask(s, s * (0.74 if small else 0.72))
+    _paint(img, (0, 0, 0), ImageChops.multiply(_long_shadow_alpha(glyph, s), shape))
     _paint(img, GLYPH, glyph)
     img.putalpha(shape)
     return img.resize((size, size), Image.LANCZOS)

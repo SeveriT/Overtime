@@ -105,7 +105,7 @@ data class EpgData(
 enum class GroupSort(val label: String) {
     PLAYLIST("Playlist order"),
     ALPHABETICAL("A to Z"),
-    SIZE("Most channels first"),
+    SIZE("Most channels"),
 }
 
 @Serializable
@@ -156,11 +156,17 @@ data class AppSettings(
     val shortcuts: Map<String, List<KeyCombo>> = emptyMap(),
     val picture: PictureAdjust = PictureAdjust(),
     val audio: AudioAdjust = AudioAdjust(),
+    /** Channels with their own picture and sound ("Only for this channel"), by channel id. */
+    val channelAdjust: Map<String, ChannelAdjust> = emptyMap(),
     /** Window bounds (dp) when it was last closed, restored at launch; null until first closed. */
     val window: WindowBounds? = null,
     /** Picture-in-picture window bounds (dp) when it was last closed; null until first used. */
     val pipWindow: WindowBounds? = null,
 )
+
+/** One channel's own picture and sound, used instead of the general ones while it plays. */
+@Serializable
+data class ChannelAdjust(val picture: PictureAdjust = PictureAdjust(), val audio: AudioAdjust = AudioAdjust())
 
 /**
  * Sound adjustments: [delayMs] moves the sound later (+) or earlier (−) against the picture, for lip

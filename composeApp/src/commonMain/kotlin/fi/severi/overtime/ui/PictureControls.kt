@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fi.severi.overtime.AppViewModel
 import kotlin.math.roundToInt
@@ -51,6 +52,35 @@ internal fun PictureControls(vm: AppViewModel) {
     }
     PictureSlider("Saturation", picture.saturation, 0f..2f, "${(picture.saturation * 100).roundToInt()} %", vm::savePicture) {
         vm.adjustPicture(picture.copy(saturation = it))
+    }
+}
+
+/**
+ * "Only for this channel": while a live channel plays, its picture and sound can be its own instead of
+ * the general settings. Shown at the top of the picture and sound menu.
+ */
+@Composable
+internal fun ChannelAdjustSwitch(vm: AppViewModel) {
+    val channel by vm.currentChannel.collectAsState()
+    val on by vm.channelAdjustOn.collectAsState()
+    val ch = channel ?: return
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Only for this channel", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                if (on) "${ch.name} keeps its own picture and sound" else "Changes apply to every channel",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // Long channel names wrap onto a second line rather than being cut off
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Switch(checked = on, onCheckedChange = vm::setChannelAdjust, modifier = Modifier.padding(end = 8.dp))
     }
 }
 

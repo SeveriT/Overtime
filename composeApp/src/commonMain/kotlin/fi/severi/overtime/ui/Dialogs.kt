@@ -37,6 +37,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.key
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -89,6 +100,8 @@ private fun DialogFrame(
     actions: @Composable () -> Unit,
     /** Uses most of a desktop window instead of a phone-sized column. */
     wide: Boolean = false,
+    /** False when the content scrolls parts of itself (Settings: the page, not the categories). */
+    scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = !wide)) {
@@ -98,7 +111,11 @@ private fun DialogFrame(
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             // Keep a margin above and below so it reads as a dialog, not a page.
-            modifier = if (wide) Modifier.padding(vertical = 72.dp).fillMaxWidth(WIDE_DIALOG_FRACTION).widthIn(max = WIDE_DIALOG_MAX) else Modifier.width(600.dp),
+            modifier = if (wide) Modifier.padding(vertical = 72.dp)
+                    // 90 % of the window, but at most WIDE_DIALOG_MAX (the cap goes first: after
+                    // fillMaxWidth the width is already fixed and widthIn can't shrink it)
+                    .widthIn(max = WIDE_DIALOG_MAX / WIDE_DIALOG_FRACTION)
+                    .fillMaxWidth(WIDE_DIALOG_FRACTION) else Modifier.width(600.dp),
         ) {
             Column(Modifier.padding(top = 24.dp, bottom = 20.dp)) {
                 Text(
@@ -109,7 +126,7 @@ private fun DialogFrame(
                 Column(
                     Modifier
                         .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState())
+                        .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                         .padding(horizontal = 24.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     content = content,
@@ -125,10 +142,27 @@ private fun DialogFrame(
 }
 
 private const val WIDE_DIALOG_FRACTION = 0.9f
-private val WIDE_DIALOG_MAX = 1200.dp
+/** Settings: categories (about 250 dp) plus a page about 490 dp wide. */
+private val WIDE_DIALOG_MAX = 780.dp
 
-/** Below this the wide Settings dialog stacks its two columns. */
-private val TWO_COLUMN_MIN = 840.dp
+/** Settings pages wider than this lay the keyboard shortcuts out in two columns. */
+private val SHORTCUTS_TWO_COLUMN_MIN = 640.dp
+
+/** Settings: the dialog's body is at most this tall, so it stays a dialog on tall screens. */
+private val SETTINGS_MAX_HEIGHT = 680.dp
+
+/** The categories down the left of Settings, each one page. */
+private enum class SettingsPage(val label: String, val icon: ImageVector) {
+    GENERAL("General", Icons.Default.Settings),
+    PLAYBACK("Playback", Icons.Default.PlayCircle),
+    AUDIO_SUBTITLES("Audio & subtitles", Icons.Default.Subtitles),
+    APPEARANCE("Appearance", Icons.Default.Palette),
+    MOVIES("Movies & series", Icons.Default.Movie),
+    SHORTCUTS("Shortcuts", Icons.Default.Keyboard),
+}
+
+/** The category Settings opened on last time (for this run of the app). */
+private var lastSettingsPage = SettingsPage.GENERAL
 
 @Composable
 private fun SectionHeader(text: String) {
@@ -460,9 +494,38 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                 },
             ) { Text("Save") }
         },
+        scrollable = false,
     ) {
-        // General settings on the left, the look of subtitles and posters on the right; stacked when narrow.
-        val general: @Composable ColumnScope.() -> Unit = {
+        // Categories on the left (they stay put), the chosen one's settings on the right (they scroll).
+        var page by remember { mutableStateOf(lastSettingsPage) }
+        Row(
+            Modifier.fillMaxWidth().heightIn(max = SETTINGS_MAX_HEIGHT).fillMaxHeight(),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            Column(Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsPage.entries.forEach { entry ->
+                    NavigationDrawerItem(
+                        label = { Text(entry.label) },
+                        icon = { Icon(entry.icon, contentDescription = null) },
+                        selected = entry == page,
+                        onClick = {
+                            page = entry
+                            lastSettingsPage = entry
+                        },
+                    )
+                }
+            }
+            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                val wide = maxWidth >= SHORTCUTS_TWO_COLUMN_MIN
+                // A fresh scroll position for each page.
+                key(page) {
+                    Column(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(end = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        when (page) {
+                            SettingsPage.GENERAL -> {
             SectionHeader("Sources")
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -491,21 +554,8 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                 onCheckedChange = { refreshOnLaunch = it },
             )
 
-            SectionHeader("Appearance")
-            FieldLabel("Accent colour")
-            ColorPicker(
-                presets = AccentPresets,
-                current = accentColorOf(settings.accentColor),
-                onPick = { color -> vm.updateSettings { it.copy(accentColor = if (color == DefaultAccent) null else color.toHex()) } },
-                supportingText = "Buttons, sliders, selections and progress.",
-            )
-            FieldLabel("Sidebar and title bar colour")
-            ColorPicker(
-                presets = SidebarPresets,
-                current = sidebarColorOf(settings.sidebarColor),
-                onPick = { color -> vm.updateSettings { it.copy(sidebarColor = if (color == DefaultSidebarColor) null else color.toHex()) } },
-                supportingText = "Light colours switch the sidebar text to dark.",
-            )
+
+            SectionHeader("Channel groups")
             FieldLabel("Channel group order")
             ConnectedChoiceGroup(
                 options = GroupSort.entries,
@@ -514,6 +564,14 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                 onSelect = { groupSort = it },
             )
 
+            SectionHeader("Info")
+            Text(
+                "Data folder: ${vm.dataDirectory}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+                            }
+                            SettingsPage.PLAYBACK -> {
             SectionHeader("Playback")
             SwitchRow(
                 title = "Live rewind",
@@ -530,6 +588,8 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
             )
             FieldLabel("Show Up next before the end (about when the credits start)")
             ChipChoice(UpNextLead.entries, upNextLead, { it.label }) { upNextLead = it }
+
+            SectionHeader("Network")
             OutlinedTextField(userAgent, { userAgent = it }, label = { Text("HTTP user agent") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(
                 caching, { caching = it.filter(Char::isDigit) },
@@ -539,14 +599,8 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            SectionHeader("Info")
-            Text(
-                "Data folder: ${vm.dataDirectory}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        val looks: @Composable ColumnScope.() -> Unit = {
+                            }
+                            SettingsPage.AUDIO_SUBTITLES -> {
             SectionHeader("Audio")
             AudioLanguagePicker(audioLanguage, onPick = { audioLanguage = it })
 
@@ -554,18 +608,35 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
             SubtitleLanguagePicker(subtitleLanguage, onPick = { subtitleLanguage = it })
             SubtitleStyleEditor(subtitles, onChange = { subtitles = it })
 
+                            }
+                            SettingsPage.APPEARANCE -> {
+            SectionHeader("Colours")
+            FieldLabel("Accent colour")
+            ColorPicker(
+                presets = AccentPresets,
+                current = accentColorOf(settings.accentColor),
+                onPick = { color -> vm.updateSettings { it.copy(accentColor = if (color == DefaultAccent) null else color.toHex()) } },
+                supportingText = "Buttons, sliders, selections and progress.",
+            )
+            FieldLabel("Sidebar and title bar colour")
+            ColorPicker(
+                presets = SidebarPresets,
+                current = sidebarColorOf(settings.sidebarColor),
+                onPick = { color -> vm.updateSettings { it.copy(sidebarColor = if (color == DefaultSidebarColor) null else color.toHex()) } },
+                supportingText = "Light colours switch the sidebar text to dark.",
+            )
+                            }
+                            SettingsPage.MOVIES -> {
             SectionHeader("Poster cards")
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
-                PosterPreview(posterWidth, posterCorners, landscapePosters, hidePosterLabels, ratedPosters, posterTemplate)
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Live preview", style = MaterialTheme.typography.labelLarge)
-                    val width = if (landscapePosters) (posterWidth.dp * 1.8f).toInt() else posterWidth.dp
-                    val height = if (landscapePosters) width * 9 / 16 else posterWidth.dp * 3 / 2
-                    Text("Width: $width dp", style = MaterialTheme.typography.bodyMedium)
-                    Text("Height: $height dp", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Corner radius: ${posterCorners.dp} dp", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
+            PosterPreview(posterWidth, posterCorners, landscapePosters, hidePosterLabels, ratedPosters, posterTemplate)
+            // The preview's size, in one line under it (the page is too narrow for a column beside it).
+            val previewWidth = if (landscapePosters) (posterWidth.dp * 1.8f).toInt() else posterWidth.dp
+            val previewHeight = if (landscapePosters) previewWidth * 9 / 16 else posterWidth.dp * 3 / 2
+            Text(
+                "Live preview · $previewWidth × $previewHeight dp · ${posterCorners.dp} dp corners",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             FieldLabel("Width")
             ChipChoice(PosterWidth.entries, posterWidth, { it.label }) { posterWidth = it }
             FieldLabel("Corner radius")
@@ -610,52 +681,12 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                     }
                 }
             }
-        }
-        BoxWithConstraints {
-            val wide = maxWidth >= TWO_COLUMN_MIN
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (wide) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = general)
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = looks)
-                    }
-                } else {
-                    general()
-                    looks()
-                }
-                // Full width under both columns: a long list, laid out in two columns of its own when there's room.
-                // Collapsed by default: a long list most people rarely need.
-                var shortcutsOpen by remember { mutableStateOf(false) }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.large)
-                        .clickable { shortcutsOpen = !shortcutsOpen }
-                        .padding(top = 8.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "Keyboard shortcuts",
-                        style = MaterialTheme.typography.titleSmallEmphasized,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (!shortcutsOpen && shortcutKeys.isNotEmpty()) {
-                        Text(
-                            "${shortcutKeys.size} changed",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(end = 8.dp),
-                        )
-                    }
-                    Icon(
-                        if (shortcutsOpen) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (shortcutsOpen) "Hide keyboard shortcuts" else "Show keyboard shortcuts",
-                    )
-                }
-                AnimatedVisibility(visible = shortcutsOpen, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ShortcutEditor(shortcutKeys, onChange = { shortcutKeys = it }, twoColumns = wide)
+                            }
+                            SettingsPage.SHORTCUTS -> {
+                                SectionHeader("Keyboard shortcuts")
+                                ShortcutEditor(shortcutKeys, onChange = { shortcutKeys = it }, twoColumns = wide)
+                            }
+                        }
                     }
                 }
             }

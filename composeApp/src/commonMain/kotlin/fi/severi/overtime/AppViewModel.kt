@@ -4,6 +4,7 @@ import fi.severi.overtime.data.LOCAL_SOURCE
 import fi.severi.overtime.data.Repository
 import fi.severi.overtime.data.nowMillis
 import fi.severi.overtime.model.AudioAdjust
+import fi.severi.overtime.model.ChannelAdjust
 import fi.severi.overtime.model.PictureAdjust
 import fi.severi.overtime.model.AppSettings
 import fi.severi.overtime.model.Channel
@@ -285,7 +286,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         player.setPicture(adjust)
     }
 
-    fun savePicture() = updateSettings { it.copy(picture = picture.value) }
+    fun savePicture() = saveAdjust()
 
     fun resetPicture() {
         adjustPicture(PictureAdjust())
@@ -301,7 +302,59 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         scope.launch { player.setAudioAdjust(adjust) }
     }
 
-    fun saveAudio() = updateSettings { it.copy(audio = audio.value) }
+    fun saveAudio() = saveAdjust()
+
+    /** The playing channel has its own picture and sound ("Only for this channel"). */
+    val channelAdjustOn = MutableStateFlow(false)
+
+    /** Saves the sliders where they belong: the playing channel's own settings, or the general ones. */
+    private fun saveAdjust() {
+        val channel = currentChannel.value
+        if (channel != null && channelAdjustOn.value) {
+            val own = ChannelAdjust(picture.value, audio.value)
+            updateSettings { it.copy(channelAdjust = it.channelAdjust + (channel.id to own)) }
+        } else {
+            updateSettings { it.copy(picture = picture.value, audio = audio.value) }
+        }
+    }
+
+    /**
+     * Turns the playing channel's own picture and sound on (starting from what's set now) or off (back to
+     * the general settings, forgetting the channel's own).
+     */
+    fun setChannelAdjust(on: Boolean) {
+        val channel = currentChannel.value ?: return
+        if (on) {
+            channelAdjustOn.value = true
+            saveAdjust()
+        } else {
+            updateSettings { it.copy(channelAdjust = it.channelAdjust - channel.id) }
+            channelAdjustOn.value = false
+            val s = _settings.value
+            adjustPicture(s.picture)
+            adjustAudio(s.audio)
+        }
+    }
+
+    /**
+     * Puts [channel]'s own picture and sound on the player (or the general ones; null = no channel, e.g. a
+     * movie). Called before playback starts, so a change of loudness levelling happens before the stream opens.
+     */
+    private fun applyAdjustFor(channel: Channel?) {
+        val s = _settings.value
+        val own = channel?.let { s.channelAdjust[it.id] }
+        channelAdjustOn.value = own != null
+        val newPicture = own?.picture ?: s.picture
+        val newAudio = own?.audio ?: s.audio
+        if (picture.value != newPicture) {
+            picture.value = newPicture
+            player.setPicture(newPicture)
+        }
+        if (audio.value != newAudio) {
+            audio.value = newAudio
+            player.setAudioAdjust(newAudio)
+        }
+    }
 
     fun resetAudio() {
         adjustAudio(AudioAdjust())
@@ -410,6 +463,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         player.stop()
         currentChannel.value = null
         currentVod.value = null
+        applyAdjustFor(null)
         streamUrl.value = null
         vodContext.value = null
         updateSettings { it.copy(lastChannelId = null) }
@@ -663,6 +717,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         saveProgressNow()
         currentChannel.value = null
         currentVod.value = playback
+        applyAdjustFor(null)
         vodSidebar.value = false
         val s = _settings.value
         val resumeAt = if (fromStart) 0L else history.resumeAt(entry.key) ?: 0L
@@ -728,6 +783,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         if (channel.sourceId == selectedSourceId.value && channelsIn(selectedGroup.value).none { it.id == channel.id }) {
             selectedGroup.value = channel.group
         }
+        applyAdjustFor(channel)
         val s = _settings.value
         val rewindMs = if (s.rewindEnabled) s.rewindMinutes * 60_000L else 0L
         player.play(channel.url, s.networkCachingMs, s.userAgent, rewindMs)

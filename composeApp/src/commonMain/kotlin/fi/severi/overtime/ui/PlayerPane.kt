@@ -750,6 +750,7 @@ private fun PictureButton(vm: AppViewModel) {
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = MaterialTheme.shapes.large) {
             Column(Modifier.width(340.dp).padding(start = 16.dp, end = 8.dp, bottom = 8.dp)) {
+                ChannelAdjustSwitch(vm)
                 PictureControls(vm)
                 AudioControls(vm)
             }
