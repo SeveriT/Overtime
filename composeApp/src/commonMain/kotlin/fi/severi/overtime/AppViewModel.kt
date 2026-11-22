@@ -3,6 +3,7 @@ package fi.severi.overtime
 import fi.severi.overtime.data.LOCAL_SOURCE
 import fi.severi.overtime.data.Repository
 import fi.severi.overtime.data.nowMillis
+import fi.severi.overtime.model.AudioAdjust
 import fi.severi.overtime.model.PictureAdjust
 import fi.severi.overtime.model.AppSettings
 import fi.severi.overtime.model.Channel
@@ -291,10 +292,28 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         savePicture()
     }
 
+    /** Live sound adjustments; saved to settings when a slider is released or the switch flips. */
+    val audio = MutableStateFlow(_settings.value.audio)
+
+    fun adjustAudio(adjust: AudioAdjust) {
+        audio.value = adjust
+        // VLC's audio calls can wait on its audio thread, so they run off the UI thread.
+        scope.launch { player.setAudioAdjust(adjust) }
+    }
+
+    fun saveAudio() = updateSettings { it.copy(audio = audio.value) }
+
+    fun resetAudio() {
+        adjustAudio(AudioAdjust())
+        saveAudio()
+    }
+
     init {
         player.setVolume(_settings.value.volume)
         player.setPicture(picture.value)
+        player.setAudioAdjust(audio.value)
         player.setSubtitleLanguage(_settings.value.subtitleLanguage)
+        player.setAudioLanguage(_settings.value.audioLanguage)
         scope.launch {
             while (true) {
                 delay(30_000)
@@ -887,6 +906,7 @@ class AppViewModel(private val repo: Repository, val player: VideoPlayer) {
         settingsDirty.trySend(Unit)
         if (after.subtitles != before.subtitles) scope.launch { player.setSubtitleStyle(after.subtitles) }
         if (after.subtitleLanguage != before.subtitleLanguage) player.setSubtitleLanguage(after.subtitleLanguage)
+        if (after.audioLanguage != before.audioLanguage) player.setAudioLanguage(after.audioLanguage)
         if (after.userAgent != before.userAgent) repo.setUserAgent(after.userAgent)
         // Recording starts with playback, so turning rewind on or off restarts the current channel.
         if (after.rewindEnabled != before.rewindEnabled || after.rewindMinutes != before.rewindMinutes) {

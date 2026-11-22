@@ -1,11 +1,14 @@
 package fi.severi.overtime.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +51,81 @@ internal fun PictureControls(vm: AppViewModel) {
     }
     PictureSlider("Saturation", picture.saturation, 0f..2f, "${(picture.saturation * 100).roundToInt()} %", vm::savePicture) {
         vm.adjustPicture(picture.copy(saturation = it))
+    }
+}
+
+/**
+ * Sound settings under the picture ones: audio delay (lip sync), loudness levelling and a three-band
+ * equaliser. Sliders apply live and save on release; the switch saves at once.
+ */
+@Composable
+internal fun AudioControls(vm: AppViewModel) {
+    val audio by vm.audio.collectAsState()
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+        Text(
+            "Sound",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(
+            onClick = vm::resetAudio,
+            enabled = !audio.isDefault,
+            shapes = ButtonDefaults.shapes(),
+            modifier = Modifier.alpha(if (audio.isDefault) 0f else 1f),
+        ) { Text("Reset") }
+    }
+    // Lip sync: snaps to 50 ms steps; + plays the sound later, − earlier.
+    PictureSlider("Delay", audio.delayMs.toFloat(), -2000f..2000f, signedSeconds(audio.delayMs), vm::saveAudio) {
+        vm.adjustAudio(audio.copy(delayMs = (it / 50f).roundToInt() * 50))
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(vertical = 4.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Loudness levelling", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Evens out loud adverts and quiet dialogue",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = audio.levelling,
+            onCheckedChange = {
+                vm.adjustAudio(audio.copy(levelling = it))
+                vm.saveAudio()
+            },
+            modifier = Modifier.padding(end = 8.dp),
+        )
+    }
+    PictureSlider("Bass", audio.bass, -12f..12f, signedDb(audio.bass), vm::saveAudio) {
+        vm.adjustAudio(audio.copy(bass = it.roundToInt().toFloat()))
+    }
+    PictureSlider("Voice", audio.voice, -12f..12f, signedDb(audio.voice), vm::saveAudio) {
+        vm.adjustAudio(audio.copy(voice = it.roundToInt().toFloat()))
+    }
+    PictureSlider("Treble", audio.treble, -12f..12f, signedDb(audio.treble), vm::saveAudio) {
+        vm.adjustAudio(audio.copy(treble = it.roundToInt().toFloat()))
+    }
+}
+
+/** Audio delay as seconds with a sign: "+0.35 s", "−1.20 s", "0 s". */
+private fun signedSeconds(ms: Int): String = when {
+    ms == 0 -> "0 s"
+    ms > 0 -> "+%.2f s".format(ms / 1000f)
+    else -> "\u2212%.2f s".format(-ms / 1000f)
+}
+
+/** Equaliser gain: "+3 dB", "−6 dB", "0 dB". */
+private fun signedDb(db: Float): String {
+    val v = db.roundToInt()
+    return when {
+        v > 0 -> "+$v dB"
+        v < 0 -> "\u2212${-v} dB"
+        else -> "0 dB"
     }
 }
 

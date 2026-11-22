@@ -408,6 +408,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
     var upNextLead by remember { mutableStateOf(settings.upNextLead) }
     var subtitles by remember { mutableStateOf(settings.subtitles) }
     var subtitleLanguage by remember { mutableStateOf(settings.subtitleLanguage) }
+    var audioLanguage by remember { mutableStateOf(settings.audioLanguage) }
 
     // Colours preview live; closing without saving puts the originals back.
     val originalSidebar = remember { settings.sidebarColor }
@@ -445,6 +446,7 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
                             upNextLead = upNextLead,
                             subtitles = subtitles,
                             subtitleLanguage = subtitleLanguage,
+                            audioLanguage = audioLanguage,
                             posterWidth = posterWidth,
                             posterCorners = posterCorners,
                             landscapePosters = landscapePosters,
@@ -545,6 +547,9 @@ fun SettingsDialog(vm: AppViewModel, onDismiss: () -> Unit, onOpenSources: () ->
             )
         }
         val looks: @Composable ColumnScope.() -> Unit = {
+            SectionHeader("Audio")
+            AudioLanguagePicker(audioLanguage, onPick = { audioLanguage = it })
+
             SectionHeader("Subtitles")
             SubtitleLanguagePicker(subtitleLanguage, onPick = { subtitleLanguage = it })
             SubtitleStyleEditor(subtitles, onChange = { subtitles = it })

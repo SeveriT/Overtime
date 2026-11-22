@@ -28,9 +28,10 @@ IPTV player for Windows, built with Kotlin, Compose Multiplatform (Material 3 Ex
 ### Player
 - Smooth 4K playback
 - Audio and subtitle track selection
-- Default subtitle language
+- Default audio and subtitle language
 - Subtitle style: font, size, edge, colour and bold
 - Picture settings: brightness, contrast and saturation
+- Sound settings: audio delay for lip sync, loudness levelling, and bass, voice and treble
 - Stream info: resolution, frame rate, codec, bitrate and more, with copy stream URL
 - Fullscreen and customisable keyboard shortcuts
 - Picture-in-picture: a small always-on-top window you can move and resize, with play/pause, channel, mute and fit-to-video controls; minimising the window while something plays switches to it

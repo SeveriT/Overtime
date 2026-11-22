@@ -146,6 +146,8 @@ data class AppSettings(
     val subtitles: SubtitleStyle = SubtitleStyle(),
     /** Subtitles to turn on for movies and episodes when the file has them; null leaves VLC's choice. */
     val subtitleLanguage: SubtitleLanguage? = null,
+    /** Audio to pick on channels, movies and episodes that have it; null leaves the stream's default. */
+    val audioLanguage: SubtitleLanguage? = null,
     /** Folders of the user's own movies and series (Movies & series > Local files). */
     val localFolders: List<String> = emptyList(),
     /** Look up posters for local files online (their titles go to Stremio's Cinemeta). */
@@ -153,11 +155,29 @@ data class AppSettings(
     /** Keyboard shortcuts the user changed, by Shortcut name; anything missing uses the default keys. */
     val shortcuts: Map<String, List<KeyCombo>> = emptyMap(),
     val picture: PictureAdjust = PictureAdjust(),
+    val audio: AudioAdjust = AudioAdjust(),
     /** Window bounds (dp) when it was last closed, restored at launch; null until first closed. */
     val window: WindowBounds? = null,
     /** Picture-in-picture window bounds (dp) when it was last closed; null until first used. */
     val pipWindow: WindowBounds? = null,
 )
+
+/**
+ * Sound adjustments: [delayMs] moves the sound later (+) or earlier (−) against the picture, for lip
+ * sync; [levelling] evens out loud and quiet parts (VLC's volume normaliser); [bass], [voice] and
+ * [treble] are equaliser gains in dB (−12..12, 0 = flat) over the low, middle and high bands.
+ */
+@Serializable
+data class AudioAdjust(
+    val delayMs: Int = 0,
+    val levelling: Boolean = false,
+    val bass: Float = 0f,
+    val voice: Float = 0f,
+    val treble: Float = 0f,
+) {
+    val isDefault: Boolean get() = this == AudioAdjust()
+    val isFlat: Boolean get() = bass == 0f && voice == 0f && treble == 0f
+}
 
 /**
  * Picture adjustments applied while drawing: [brightness] is an offset (-0.5..0.5, 0 = none),
@@ -169,8 +189,8 @@ data class PictureAdjust(val brightness: Float = 0f, val contrast: Float = 1f, v
 }
 
 /**
- * A subtitle language: its ISO 639 codes (VLC matches tagged tracks by these) and the names a track
- * might carry instead when it isn't tagged.
+ * A language for subtitles or audio: its ISO 639 codes (VLC matches tagged tracks by these) and the
+ * names a track might carry instead when it isn't tagged. (Named before audio used it too.)
  */
 @Serializable
 enum class SubtitleLanguage(val label: String, val codes: List<String>, val native: String) {

@@ -726,7 +726,8 @@ private val UP_NEXT_CORNER = 22.dp
 /** Toolbar menus report opening and closing so the controls stay up meanwhile. */
 private val LocalMenuOpenChange = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
 
-/** Brightness, contrast and saturation in a menu; highlighted while the picture is adjusted. */
+/** Picture (brightness, contrast, saturation) and sound (delay, levelling, equaliser) in a menu;
+ * highlighted while either is adjusted. */
 @Composable
 private fun PictureButton(vm: AppViewModel) {
     var open by remember { mutableStateOf(false) }
@@ -736,19 +737,21 @@ private fun PictureButton(vm: AppViewModel) {
         onDispose { if (open) onMenuOpenChange(false) }
     }
     val picture by vm.picture.collectAsState()
+    val audio by vm.audio.collectAsState()
     Box {
-        WithTooltip("Picture: brightness, contrast, saturation") {
+        WithTooltip("Picture and sound") {
             FilledTonalIconToggleButton(
-                checked = !picture.isDefault,
+                checked = !picture.isDefault || !audio.isDefault,
                 onCheckedChange = { open = true },
                 shapes = IconButtonDefaults.toggleableShapes(),
             ) {
-                Icon(Icons.Default.Tune, contentDescription = "Picture settings")
+                Icon(Icons.Default.Tune, contentDescription = "Picture and sound settings")
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = MaterialTheme.shapes.large) {
             Column(Modifier.width(340.dp).padding(start = 16.dp, end = 8.dp, bottom = 8.dp)) {
                 PictureControls(vm)
+                AudioControls(vm)
             }
         }
     }

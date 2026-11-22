@@ -1,9 +1,9 @@
 """Generates the Overtime app icon for the Windows app (master PNG, window icon PNG, multi-size ICO) and,
 optionally, the Android app's launcher icon layers.
 
-Design: the Material Icons "live_tv" glyph (Rounded: a TV with antennas and a play triangle) in near black
-(#0A0A0B) on a light blue (#8AD0F2) rounded square. The TV casts a soft shadow down and to the right,
-and the square is shaded slightly along its bottom edge. Both apps share this look.
+Design: the Material Icons "live_tv" glyph (Rounded: a TV with antennas and a play triangle), drawn a
+little bolder, in near black (#0A0A0B) on a light blue (#8AD0F2) rounded square, with a flat "long
+shadow" running from it at 45 degrees to the bottom-right edge. Both apps share this look.
 
 Glyph source (Apache 2.0, Compose material-icons-extended Icons.Rounded.LiveTv): tools/symbols/live_tv_rounded_24px.svg
 
@@ -29,14 +29,12 @@ ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
 SMALL_MAX = 32                # sizes up to this use a larger glyph and no shadows, to stay crisp
 SS = 8                        # supersampling factor
 
-# Shadows, as shares of the icon size (tuned against the reference image the user picked).
-GLYPH_SHADOW_DX = 0.020       # the TV's shadow falls down and to the right
-GLYPH_SHADOW_DY = 0.030
-GLYPH_SHADOW_BLUR = 0.025
-GLYPH_SHADOW_OPACITY = 0.27
-RIM_SHIFT = 0.020             # the shape's own edge shading, strongest at the bottom
-RIM_BLUR = 0.020
-RIM_OPACITY = 0.17
+# The TV's strokes are 2 glyph units thick; this much is added on every side (a bolder glyph).
+GLYPH_THICKEN = 0.3
+# Flat "long shadow" (like many launcher icon packs): the glyph's silhouette dragged at 45 degrees to the
+# bottom-right edge, darkest at the glyph and fading towards the far corner.
+LONG_SHADOW_OPACITY = 0.24
+LONG_SHADOW_FADE = 0.75       # share of the opacity lost by the bottom-right corner
 
 # ---- tiny SVG path reader (M L H V Q T C S Z, absolute and relative) -------------------
 
@@ -161,25 +159,45 @@ def _rounded_square(s, margin):
 
 
 def _glyph_mask(s, glyph_box):
-    """The TV glyph in an s x s canvas: glyph_box px wide, its screen (not the antennas) centred."""
+    """The TV glyph in an s x s canvas: glyph_box px wide, its screen (not the antennas) centred, with
+    its strokes made GLYPH_THICKEN units bolder on every side."""
     scale = glyph_box / VIEWBOX
     offset = (s - glyph_box) / 2
     offset_y = s / 2 - SCREEN_CENTRE_Y * scale
-    return _mask(load_symbol(), s, scale, offset, offset_y)
+    return _thicken(_mask(load_symbol(), s, scale, offset, offset_y), GLYPH_THICKEN * scale)
 
 
-def _glyph_shadow(glyph, unit):
-    """Soft shadow of the glyph, as an alpha mask; [unit] is the icon size the shadow shares refer to."""
-    shadow = _shifted(glyph, GLYPH_SHADOW_DX * unit, GLYPH_SHADOW_DY * unit)
-    shadow = shadow.filter(ImageFilter.GaussianBlur(GLYPH_SHADOW_BLUR * unit))
-    return _scaled(shadow, GLYPH_SHADOW_OPACITY)
+def _thicken(mask, px):
+    """Grows a mask's edges outward by about [px]: blur, then a low threshold (a blur's value falls to
+    30/255 at ~1.19 sigma outside an edge). Corners come out softly rounded, like the glyph's own."""
+    if px < 0.5:
+        return mask
+    blurred = mask.filter(ImageFilter.GaussianBlur(px / 1.19))
+    return blurred.point(lambda v: 255 if v >= 30 else 0)
 
 
-def _rim_shade(shape, unit):
-    """Shading inside the shape along its edge, strongest at the bottom, as an alpha mask."""
-    outside = ImageChops.invert(_shifted(shape, 0, -RIM_SHIFT * unit))
-    shade = outside.filter(ImageFilter.GaussianBlur(RIM_BLUR * unit))
-    return ImageChops.multiply(_scaled(shade, RIM_OPACITY), shape)
+def _long_shadow(glyph, length):
+    """The glyph dragged diagonally (down and right) by up to [length] px: every shift 0..length,
+    built by doubling (shift 1, 2, 4, ...) so it costs a handful of image operations."""
+    acc = glyph
+    k = 1
+    while k < length:
+        acc = ImageChops.lighter(acc, _shifted(acc, k, k))
+        k *= 2
+    return acc
+
+
+def _diagonal_fade(s):
+    """255 in the top-left corner down to (1 - LONG_SHADOW_FADE) * 255 in the bottom-right."""
+    v = Image.linear_gradient("L").resize((s, s))  # 0 at the top, 255 at the bottom
+    h = v.transpose(Image.Transpose.TRANSPOSE)     # 0 at the left, 255 at the right
+    diagonal = ImageChops.add(h, v, scale=2.0)      # (x + y) / 2
+    return diagonal.point(lambda d: round(255 * (1 - LONG_SHADOW_FADE * d / 255)))
+
+
+def _long_shadow_alpha(glyph, s):
+    shadow = ImageChops.multiply(_long_shadow(glyph, s), _diagonal_fade(s))
+    return _scaled(shadow, LONG_SHADOW_OPACITY)
 
 
 def _paint(img, colour, alpha):
@@ -200,8 +218,7 @@ def render(size):
     # icon width with breathing room; small sizes run a bit larger to stay legible.
     glyph = _glyph_mask(s, s * (0.80 if small else 0.72))
     if not small:
-        _paint(img, (0, 0, 0), _rim_shade(shape, s))
-        _paint(img, (0, 0, 0), ImageChops.multiply(_glyph_shadow(glyph, s), shape))
+        _paint(img, (0, 0, 0), ImageChops.multiply(_long_shadow_alpha(glyph, s), shape))
     _paint(img, GLYPH, glyph)
     img.putalpha(shape)
     return img.resize((size, size), Image.LANCZOS)
@@ -230,29 +247,18 @@ ADAPTIVE_DP = 108
 VISIBLE_DP = 72
 DENSITIES = {"mdpi": 1.0, "hdpi": 1.5, "xhdpi": 2.0, "xxhdpi": 3.0, "xxxhdpi": 4.0}
 LEGACY_DP = 48
-BOTTOM_SHADE_HEIGHT = 0.12  # share of the visible icon, at the bottom, that darkens
 
 
 def _adaptive_layers(px):
-    """Foreground (glyph + its shadow) and background (blue + rim shade) layers, px x px."""
+    """Foreground (glyph + its long shadow) and plain background layers, px x px."""
     s = px * SS
-    unit = s * VISIBLE_DP / ADAPTIVE_DP  # the shadows are tuned to the visible icon, not the 108 dp layer
+    unit = s * VISIBLE_DP / ADAPTIVE_DP  # the glyph is sized to the visible icon, not the 108 dp layer
     glyph = _glyph_mask(s, unit * 0.72)
     fg = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    _paint(fg, (0, 0, 0), _glyph_shadow(glyph, unit))
+    # The shadow runs off the 108 dp layer; the launcher's mask (whatever its shape) cuts it at the edge.
+    _paint(fg, (0, 0, 0), _long_shadow_alpha(glyph, s))
     _paint(fg, GLYPH, glyph)
-
-    # The launcher picks the mask shape (circle, squircle, rounded square), so instead of the Windows
-    # icon's rim shade the background darkens towards the bottom of the visible area, which reads the
-    # same under any shape.
     bg = Image.new("RGBA", (s, s), BACKGROUND + (255,))
-    bottom = (s + unit) / 2
-    band = BOTTOM_SHADE_HEIGHT * unit
-    shade = Image.new("L", (1, s), 0)
-    for y in range(s):
-        t = min(max((y - (bottom - band)) / band, 0.0), 1.0)
-        shade.putpixel((0, y), round(255 * RIM_OPACITY * t * t))
-    _paint(bg, (0, 0, 0), shade.resize((s, s)))
     return fg.resize((px, px), Image.LANCZOS), bg.resize((px, px), Image.LANCZOS)
 
 

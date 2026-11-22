@@ -1,5 +1,6 @@
 package fi.severi.overtime.player
 
+import fi.severi.overtime.model.AudioAdjust
 import fi.severi.overtime.model.PictureAdjust
 import fi.severi.overtime.model.SubtitleLanguage
 import fi.severi.overtime.model.SubtitleStyle
@@ -37,6 +38,7 @@ import org.jetbrains.skia.ColorType
 import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
 import uk.co.caprica.vlcj.factory.MediaPlayerFactory
+import uk.co.caprica.vlcj.player.base.Equalizer
 import uk.co.caprica.vlcj.factory.discovery.NativeDiscovery
 import uk.co.caprica.vlcj.player.base.MediaPlayer
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
@@ -57,7 +59,10 @@ import kotlin.math.roundToInt
  * libVLC-backed player. Video frames are rendered through a callback surface into a Compose [ImageBitmap],
  * so the picture is an ordinary composable and overlays draw on top of it without AWT interop.
  */
-class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : VideoPlayer {
+class VlcPlayer(
+    private var subtitleStyle: SubtitleStyle = SubtitleStyle(),
+    initialAudio: AudioAdjust = AudioAdjust(),
+) : VideoPlayer {
     // Replaced together when the subtitle style changes (VLC reads it only at start-up).
     /** The bundled VLC has no plugin cache yet: the first factory has VLC write one. */
     private var buildPluginCache = false
@@ -67,6 +72,12 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
 
     /** Audio and subtitle track to pick again once playback restarts (seek in the buffer, restyle). */
     @Volatile private var pendingTracks: Pair<Int, Int>? = null
+
+    /** Sound adjustments; levelling is a VLC start-up option, so changing it rebuilds the player. */
+    @Volatile private var audioAdjust: AudioAdjust = initialAudio
+
+    /** The equaliser handed to VLC (belongs to [factory]); null while the sound is flat. */
+    private var equalizer: Equalizer? = null
 
     /** The live stream or file being played, for restarting it after a restyle. */
     private data class PlayRequest(val url: String, val networkCachingMs: Int, val userAgent: String)
@@ -135,11 +146,23 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
     private val events = object : MediaPlayerEventAdapter() {
         override fun playing(mediaPlayer: MediaPlayer) {
             if (runningSince == 0L) runningSince = System.currentTimeMillis()
+            // Each new input starts without the audio delay; not from VLC's event thread.
+            if (audioAdjust.delayMs != 0) scope.launch { runCatching { player.audio().setDelay(audioAdjust.delayMs * 1000L) } }
             if (subtitleCheckPending) {
                 subtitleCheckPending = false
                 scope.launch {
                     delay(TRACK_RESTORE_DELAY_MS * 3)
                     pickSubtitleLanguage()
+                }
+            }
+            if (audioCheckPending) {
+                audioCheckPending = false
+                // A track the user chose before playback restarted wins over the default.
+                if (pendingTracks == null) {
+                    scope.launch {
+                        delay(TRACK_RESTORE_DELAY_MS * 3)
+                        pickAudioLanguage()
+                    }
                 }
             }
             pendingTracks?.let { (audio, subtitle) ->
@@ -204,13 +227,56 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
     private fun newFactory(style: SubtitleStyle): MediaPlayerFactory {
         val cacheArgs = if (buildPluginCache) listOf("--reset-plugins-cache") else emptyList()
         buildPluginCache = false
-        return MediaPlayerFactory(*(listOf("--no-video-title-show", "--quiet") + cacheArgs + style.vlcArgs()).toTypedArray())
+        // Loudness levelling: VLC's volume normaliser, which pulls loud parts (adverts, explosions) down
+        // towards the level of quiet ones; the buffer is ~0.5 s so it reacts without pumping.
+        val levellingArgs = if (audioAdjust.levelling) {
+            listOf("--audio-filter=normvol", "--norm-buff-size=20", "--norm-max-level=2.0")
+        } else {
+            emptyList()
+        }
+        return MediaPlayerFactory(
+            *(listOf("--no-video-title-show", "--quiet") + cacheArgs + levellingArgs + style.vlcArgs()).toTypedArray(),
+        )
+    }
+
+    override fun setAudioAdjust(adjust: AudioAdjust) {
+        synchronized(sessionLock) {
+            val levellingChanged = adjust.levelling != audioAdjust.levelling
+            audioAdjust = adjust
+            if (levellingChanged) rebuildPlayer() else applyAudioAdjust()
+        }
+    }
+
+    /** Puts the delay and equaliser on the current player (the delay resets with every new input). */
+    private fun applyAudioAdjust() {
+        val adjust = audioAdjust
+        runCatching { player.audio().setDelay(adjust.delayMs * 1000L) }
+        runCatching {
+            if (adjust.isFlat) {
+                player.audio().setEqualizer(null)
+                return@runCatching
+            }
+            val eq = equalizer ?: factory.equalizer().newEqualizer().also { equalizer = it }
+            val bands = factory.equalizer().bands()
+            val gains = bands.map { hz ->
+                when {
+                    hz < EQ_VOICE_FROM_HZ -> adjust.bass
+                    hz < EQ_TREBLE_FROM_HZ -> adjust.voice
+                    else -> adjust.treble
+                }
+            }
+            gains.forEachIndexed { index, gain -> eq.setAmp(index, gain) }
+            // Turn the whole signal down by half the biggest boost, so boosted bands don't clip.
+            eq.setPreamp(-0.5f * (gains.maxOrNull() ?: 0f).coerceAtLeast(0f))
+            player.audio().setEqualizer(eq)
+        }
     }
 
     private fun newPlayer(factory: MediaPlayerFactory): EmbeddedMediaPlayer =
         factory.mediaPlayers().newEmbeddedMediaPlayer().also {
             it.videoSurface().set(factory.videoSurfaces().newVideoSurface(bufferFormatCallback, renderCallback, true))
             it.events().addMediaPlayerEventListener(events)
+            equalizer = null
         }
 
     // ---- live rewind -------------------------------------------------------------------
@@ -241,6 +307,25 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
 
     override fun setSubtitleLanguage(language: SubtitleLanguage?) {
         subtitleLanguage = language
+    }
+
+    @Volatile private var audioLanguage: SubtitleLanguage? = null
+
+    /** Look for the preferred audio once the newly started channel, movie or episode is playing. */
+    @Volatile private var audioCheckPending = false
+
+    override fun setAudioLanguage(language: SubtitleLanguage?) {
+        audioLanguage = language
+    }
+
+    /**
+     * Switches to the preferred audio if VLC didn't (live channels play through the rewind buffer, which
+     * takes no options, and untagged tracks only carry a name like "Finnish" or "Suomi").
+     */
+    private fun pickAudioLanguage() {
+        val language = audioLanguage ?: return
+        val match = player.audio().trackDescriptions().firstOrNull { it.id() >= 0 && language.matches(it.description()) } ?: return
+        if (player.audio().track() != match.id()) player.audio().setTrack(match.id())
     }
 
     /**
@@ -323,6 +408,8 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
             if (startMs > 0) ":start-time=${startMs / 1000.0}" else null,
             // VLC picks a subtitle track tagged with one of these codes by itself.
             language?.let { ":sub-language=" + it.codes.joinToString(",") },
+            // And an audio track the same way (pickAudioLanguage covers untagged ones).
+            audioLanguage?.let { ":audio-language=" + it.codes.joinToString(",") },
         )
         player.media().play(url, *options.toTypedArray())
     }
@@ -493,6 +580,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
             this.onDemand = onDemand
             lastPlay = PlayRequest(url, networkCachingMs, userAgent)
             subtitleCheckPending = onDemand && subtitleLanguage != null
+            audioCheckPending = audioLanguage != null
             pixelAspect = 1f
             pendingTracks = null
             shownLive = 0L
@@ -577,6 +665,17 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
         synchronized(sessionLock) {
             if (style == subtitleStyle) return
             subtitleStyle = style
+            rebuildPlayer()
+        }
+    }
+
+    /**
+     * Replaces VLC with one made from the current start-up options (subtitle look, loudness levelling)
+     * and carries on with what was playing, where it was. Caller holds [sessionLock].
+     */
+    private fun rebuildPlayer() {
+        run {
+            val style = subtitleStyle
             val s = _state.value
             val request = lastPlay
             val wasRunning = player.status().isPlaying || s.paused
@@ -593,6 +692,7 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
             oldFactory.release()
             player.audio().setVolume(vlcVolume(volume))
             if (s.muted) player.audio().setMute(true)
+            applyAudioAdjust()
 
             if (request == null || s.error != null || s.ended) return
             pendingTracks = tracks
@@ -627,6 +727,10 @@ class VlcPlayer(private var subtitleStyle: SubtitleStyle = SubtitleStyle()) : Vi
         fun vlcVolume(volume: Int): Int = (Math.cbrt(volume / 100.0) * 100).roundToInt().coerceIn(0, 100)
 
         const val TICK_MS = 500L
+
+        /** Equaliser bands below this are "bass", up to [EQ_TREBLE_FROM_HZ] "voice", above it "treble". */
+        const val EQ_VOICE_FROM_HZ = 250f
+        const val EQ_TREBLE_FROM_HZ = 4_000f
         const val TRACK_RESTORE_DELAY_MS = 400L
         const val MAX_KEYFRAME_SLACK_MS = 10_000L
         const val MIN_CUSHION_MS = 1_500L

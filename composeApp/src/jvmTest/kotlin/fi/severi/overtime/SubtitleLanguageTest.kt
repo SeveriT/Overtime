@@ -13,6 +13,10 @@ class SubtitleLanguageTest {
         assertTrue(finnish.matches("Suomi"))
         assertTrue(finnish.matches("fin"))
         assertTrue(finnish.matches("Subtitles (fi)"))
+        // Audio tracks name it the same three ways (any case): the one "Finnish" option covers them all.
+        assertTrue(finnish.matches("Finnish 5.1"))
+        assertTrue(finnish.matches("FIN - Stereo"))
+        assertTrue(finnish.matches("suomi (AAC)"))
         assertFalse(finnish.matches("Track 2 - [English]"))
         // A code must be a whole word: "fin" is not inside "Infinity".
         assertFalse(finnish.matches("Infinity commentary"))

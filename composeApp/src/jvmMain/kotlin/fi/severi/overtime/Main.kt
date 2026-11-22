@@ -106,7 +106,7 @@ private fun runApp() = application {
     val appIcon = remember { loadAppIcon() }
     val repo = remember { Repository(FileStore()) }
     // VLC takes the subtitle look at start-up, so it comes from the saved settings.
-    val playerResult = remember { runCatching { VlcPlayer(repo.loadSettings().subtitles) }.also { StartupLog.mark("vlc") } }
+    val playerResult = remember { runCatching { repo.loadSettings().let { VlcPlayer(it.subtitles, it.audio) } }.also { StartupLog.mark("vlc") } }
     // Settings, sources and the cached channel lists.
     val vm = remember { playerResult.getOrNull()?.let { AppViewModel(repo, it) }.also { StartupLog.mark("data") } }
 

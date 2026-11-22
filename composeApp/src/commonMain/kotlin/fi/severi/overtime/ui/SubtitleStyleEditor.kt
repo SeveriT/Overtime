@@ -60,26 +60,48 @@ private val SubtitleColors = listOf(
 
 /** Which subtitles to turn on for movies and episodes: Off (the file's own default) or a language. */
 @Composable
-internal fun SubtitleLanguagePicker(language: SubtitleLanguage?, onPick: (SubtitleLanguage?) -> Unit) {
+internal fun SubtitleLanguagePicker(language: SubtitleLanguage?, onPick: (SubtitleLanguage?) -> Unit) =
+    LanguagePicker("Default subtitle language", "Turned on for movies and episodes that have it.", "Off", language, onPick)
+
+/** Which audio to pick on channels, movies and episodes: the stream's default or a language. */
+@Composable
+internal fun AudioLanguagePicker(language: SubtitleLanguage?, onPick: (SubtitleLanguage?) -> Unit) =
+    LanguagePicker(
+        "Default audio language",
+        "Picked on channels, movies and episodes that have it. Choosing a track yourself still wins.",
+        "Stream default",
+        language,
+        onPick,
+    )
+
+/** A settings row with a language menu; [offLabel] names the "no preference" choice. */
+@Composable
+private fun LanguagePicker(
+    title: String,
+    description: String,
+    offLabel: String,
+    language: SubtitleLanguage?,
+    onPick: (SubtitleLanguage?) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.weight(1f)) {
-            Text("Default subtitle language", style = MaterialTheme.typography.bodyLarge)
+            Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(
-                "Turned on for movies and episodes that have it.",
+                description,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Box {
             FilledTonalButton(onClick = { open = true }, shapes = ButtonDefaults.shapes()) {
-                Text(language?.label ?: "Off")
+                Text(language?.label ?: offLabel)
                 Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = MaterialTheme.shapes.large) {
                 (listOf<SubtitleLanguage?>(null) + SubtitleLanguage.entries).forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(option?.label ?: "Off") },
+                        text = { Text(option?.label ?: offLabel) },
                         onClick = {
                             onPick(option)
                             open = false
