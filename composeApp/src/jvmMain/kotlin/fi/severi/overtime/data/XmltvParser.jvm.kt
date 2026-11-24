@@ -59,7 +59,8 @@ actual fun parseXmltv(bytes: ByteArray): EpgData {
                 XMLStreamConstants.END_ELEMENT -> when (reader.localName) {
                     "display-name" -> {
                         val id = channelId
-                        val name = text?.toString()?.trim().orEmpty()
+                        // Repaired like the channel names, so the two still match
+                        val name = TextRepair.repair(text?.toString()?.trim().orEmpty())
                         if (id != null && name.isNotEmpty()) nameToId.putIfAbsent(name.lowercase(), id)
                         text = null
                     }
@@ -67,7 +68,11 @@ actual fun parseXmltv(bytes: ByteArray): EpgData {
                     "title", "desc" -> text = null
                     "programme" -> if (pChannel.isNotEmpty() && pStart > 0 && pStop > pStart) {
                         programmes.getOrPut(pChannel) { ArrayList() } +=
-                            Programme(pChannel, pStart, pStop, title.toString().trim(), desc.toString().trim())
+                            Programme(
+                                pChannel, pStart, pStop,
+                                TextRepair.repair(title.toString().trim()),
+                                TextRepair.repair(desc.toString().trim())
+                            )
                     }
                 }
             }

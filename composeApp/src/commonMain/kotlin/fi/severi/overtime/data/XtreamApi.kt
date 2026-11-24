@@ -191,9 +191,9 @@ class XtreamApi(private val client: HttpClient, private val json: Json) {
     internal companion object {
         private val YEAR = Regex("""\((\d{4})\)""")
 
-        /** A primitive as text; JSON null and non-primitives become "". */
+        /** A primitive as text; JSON null and non-primitives become "". Mangled text repaired (TextRepair). */
         fun JsonObject.str(key: String): String =
-            (get(key) as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content?.trim().orEmpty()
+            TextRepair.repair((get(key) as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content?.trim().orEmpty())
 
         fun JsonObject.obj(key: String): JsonObject? = get(key) as? JsonObject
 
