@@ -29,6 +29,10 @@ ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
 SMALL_MAX = 32                # sizes up to this get a slightly bigger glyph (and a smaller margin)
 SS = 8                        # supersampling factor
 
+# Glyph box as a share of the icon (0.72 / 0.74 until 2026-11-25, when the user asked for a 10 % smaller TV)
+GLYPH_SHARE = 0.648
+GLYPH_SHARE_SMALL = 0.666     # sizes up to SMALL_MAX
+
 # The TV's strokes are 2 glyph units thick; this much is added on every side (a bolder glyph).
 GLYPH_THICKEN = 0.3
 # Flat "long shadow" (like many launcher icon packs): the glyph's silhouette dragged at 45 degrees to the
@@ -214,10 +218,10 @@ def render(size):
     shape = _rounded_square(s, round(s * (0.02 if small else 0.04)))
     _paint(img, BACKGROUND, shape)
 
-    # Glyph box as a share of the icon. The TV fills 22/24 of its box, so 0.72 puts it at ~66 % of the
-    # icon width with breathing room; small sizes run a touch larger to stay legible. Every size has the
-    # long shadow (the user wanted it on the taskbar and title bar sizes too).
-    glyph = _glyph_mask(s, s * (0.74 if small else 0.72))
+    # Glyph box as a share of the icon. The TV fills 22/24 of its box, so GLYPH_SHARE 0.648 puts it at
+    # ~59 % of the icon width with breathing room; small sizes run a touch larger to stay legible. Every
+    # size has the long shadow (the user wanted it on the taskbar and title bar sizes too).
+    glyph = _glyph_mask(s, s * (GLYPH_SHARE_SMALL if small else GLYPH_SHARE))
     _paint(img, (0, 0, 0), ImageChops.multiply(_long_shadow_alpha(glyph, s), shape))
     _paint(img, GLYPH, glyph)
     img.putalpha(shape)
@@ -253,7 +257,7 @@ def _adaptive_layers(px):
     """Foreground (glyph + its long shadow) and plain background layers, px x px."""
     s = px * SS
     unit = s * VISIBLE_DP / ADAPTIVE_DP  # the glyph is sized to the visible icon, not the 108 dp layer
-    glyph = _glyph_mask(s, unit * 0.72)
+    glyph = _glyph_mask(s, unit * GLYPH_SHARE)
     fg = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     # The shadow runs off the 108 dp layer; the launcher's mask (whatever its shape) cuts it at the edge.
     _paint(fg, (0, 0, 0), _long_shadow_alpha(glyph, s))
